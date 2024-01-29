@@ -132,10 +132,10 @@ struct sf_node *sf_create_conv_node(struct sf_graph *graph, struct sf_node *x, s
 struct sf_node *sf_create_pool_node(struct sf_graph *graph, struct sf_node *x,
                                     int pad_h0, int pad_h1, int pad_w0, int pad_w1,
                                     int stride_h, int stride_w, int kernel_h, int kernel_w,
-                                    enum sf_pool_type pool_type, const char *layout)
+                                    enum sf_op_type pool_type, const char *layout)
 {
     struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_POOL;
+    node->op_type = pool_type;
     node->args[node->num_args++] = x;
     node->pool_attrs.pad_h0 = pad_h0;
     node->pool_attrs.pad_h1 = pad_h1;
@@ -145,7 +145,18 @@ struct sf_node *sf_create_pool_node(struct sf_graph *graph, struct sf_node *x,
     node->pool_attrs.stride_w = stride_w;
     node->pool_attrs.kernel_h = kernel_h;
     node->pool_attrs.kernel_w = kernel_w;
-    node->pool_attrs.type = pool_type;
+    strcpy(node->pool_attrs.layout, layout);
+    return node;
+}
+
+
+// create a new global pooling node
+struct sf_node *sf_create_global_pool_node(struct sf_graph *graph, struct sf_node *x,
+                                           enum sf_op_type pool_type, const char *layout)
+{
+    struct sf_node *node = _sf_create_node(graph);
+    node->op_type = pool_type;
+    node->args[node->num_args++] = x;
     strcpy(node->pool_attrs.layout, layout);
     return node;
 }
@@ -206,7 +217,7 @@ struct sf_node *sf_create_softmax_node(struct sf_graph *graph, struct sf_node *x
     struct sf_node *node = _sf_create_node(graph);
     node->op_type = OP_SOFTMAX;
     node->args[node->num_args++] = x;
-    node->softmax_attrs.axis = axis;
+    node->axis_attrs.axis = axis;
     return node;
 }
 
@@ -231,13 +242,25 @@ struct sf_node *sf_create_slice_node(struct sf_graph *graph, struct sf_node *x,
 struct sf_node *sf_create_concat_node(struct sf_graph *graph, int axis,
                                       int num_args, struct sf_node **args)
 {
+    assert(num_args <= SF_MAX_ARGS);
     struct sf_node *node = _sf_create_node(graph);
     node->op_type = OP_CONCAT;
     node->num_args = num_args;
     for (int i=0; i<num_args; i++) {
         node->args[i] = args[i];
     }
-    node->concat_attrs.axis = axis;
+    node->axis_attrs.axis = axis;
+    return node;
+}
+
+
+// create a new flatten node
+struct sf_node *sf_create_flatten_node(struct sf_graph *graph, struct sf_node *x, int axis)
+{
+    struct sf_node *node = _sf_create_node(graph);
+    node->op_type = OP_FLATTEN;
+    node->args[node->num_args++] = x;
+    node->axis_attrs.axis = axis;
     return node;
 }
 
@@ -289,17 +312,16 @@ struct sf_node *sf_create_transpose_node(struct sf_graph *graph, struct sf_node 
 
 // create a new reduce op node
 struct sf_node *sf_create_reduce_node(struct sf_graph *graph, struct sf_node *x, int num_axes,
-                                      const int *axes, int keep_dims, enum sf_reduce_type type)
+                                      const int *axes, int keep_dims, enum sf_op_type type)
 {
     struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_REDUCE;
+    node->op_type = type;
     node->args[node->num_args++] = x;
     node->reduce_attrs.num_axes = num_axes;
     for (int i=0; i<num_axes; i++) {
         node->reduce_attrs.axes[i] = axes[i];
     }
     node->reduce_attrs.keep_dims = keep_dims;
-    node->reduce_attrs.type = type;
     return node;
 }
 

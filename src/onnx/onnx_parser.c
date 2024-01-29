@@ -188,7 +188,7 @@ static void _convert_add(struct sf_graph *dst, Onnx__GraphProto *src,
 
 static void _convert_pool(struct sf_graph *dst, Onnx__GraphProto *src,
                           Onnx__NodeProto *node, struct sf_node **args,
-                          enum sf_pool_type pool_type)
+                          enum sf_op_type pool_type)
 {
     assert(node->n_input == 1);
     assert(node->n_output == 1);
@@ -226,6 +226,16 @@ static void _convert_pool(struct sf_graph *dst, Onnx__GraphProto *src,
     }
     sf_create_pool_node(dst, args[0], pad_h0, pad_h1, pad_w0, pad_w1,
                         stride_h, stride_w, kernel_h, kernel_w, pool_type, "NCHW");
+}
+
+
+static void _convert_global_pool(struct sf_graph *dst, Onnx__GraphProto *src,
+                                 Onnx__NodeProto *node, struct sf_node **args,
+                                 enum sf_op_type pool_type)
+{
+    assert(node->n_input == 1);
+    assert(node->n_output == 1);
+    sf_create_global_pool_node(dst, args[0], pool_type, "NCHW");
 }
 
 
@@ -277,6 +287,41 @@ static void _convert_identity(struct sf_graph *dst, Onnx__GraphProto *src,
     assert(node->n_input >= 1);
     assert(node->n_output >= 1);
     sf_create_identity_node(dst, args[0]);
+}
+
+
+static void _convert_concat(struct sf_graph *dst, Onnx__GraphProto *src,
+                            Onnx__NodeProto *node, struct sf_node **args)
+{
+    assert(node->n_input >= 1 && node->n_input <= SF_MAX_ARGS);
+    assert(node->n_output == 1);
+    int axis = 0;
+
+    for (int i=0; i<node->n_attribute; i++) {
+        Onnx__AttributeProto *attr = node->attribute[i];
+        if (strcmp(attr->name, "axis") == 0) {
+            axis = (int)(attr->i);
+        }
+    }
+    sf_create_concat_node(dst, axis, node->n_input, args);
+}
+
+
+static void _convert_flatten(struct sf_graph *dst, Onnx__GraphProto *src,
+                             Onnx__NodeProto *node, struct sf_node **args)
+{
+    assert(node->n_input == 1);
+    assert(node->n_output == 1);
+
+    int axis = 1;
+
+    for (int i=0; i<node->n_attribute; i++) {
+        Onnx__AttributeProto *attr = node->attribute[i];
+        if (strcmp(attr->name, "axis") == 0) {
+            axis = (int)(attr->i);
+        }
+    }
+    sf_create_flatten_node(dst, args[0], axis);
 }
 
 
@@ -360,7 +405,7 @@ static void _convert_transpose(struct sf_graph *dst, Onnx__GraphProto *src,
 
 static void _convert_reduce(struct sf_graph *dst, Onnx__GraphProto *src,
                             Onnx__NodeProto *node, struct sf_node **args,
-                            enum sf_reduce_type type)
+                            enum sf_op_type type)
 {
     assert(node->n_input == 1);
     assert(node->n_output == 1);
@@ -431,16 +476,16 @@ static void _convert_node(struct sf_graph *dst, Onnx__GraphProto *src,
         _convert_add(dst, src, node, args);
     }
     else if (strcmp(node->op_type, "AveragePool") == 0) {
-        _convert_pool(dst, src, node, args, POOL_AVG);
+        _convert_pool(dst, src, node, args, OP_AVG_POOL);
     }
     else if (strcmp(node->op_type, "MaxPool") == 0) {
-        _convert_pool(dst, src, node, args, POOL_MAX);
+        _convert_pool(dst, src, node, args, OP_MAX_POOL);
     }
     else if (strcmp(node->op_type, "GlobalAveragePool") == 0) {
-        _convert_pool(dst, src, node, args, POOL_GLOBAL_AVG);
+        _convert_global_pool(dst, src, node, args, OP_G_AVG_POOL);
     }
     else if (strcmp(node->op_type, "GlobalMaxPool") == 0) {
-        _convert_pool(dst, src, node, args, POOL_GLOBAL_MAX);
+        _convert_global_pool(dst, src, node, args, OP_G_MAX_POOL);
     }
     else if (strcmp(node->op_type, "Gemm") == 0) {
         _convert_gemm(dst, src, node, args);
@@ -454,6 +499,12 @@ static void _convert_node(struct sf_graph *dst, Onnx__GraphProto *src,
     else if (strcmp(node->op_type, "Dropout") == 0) {
         _convert_identity(dst, src, node, args);
     }
+    else if (strcmp(node->op_type, "Concat") == 0) {
+        _convert_concat(dst, src, node, args);
+    }
+    else if (strcmp(node->op_type, "Flatten") == 0) {
+        _convert_flatten(dst, src, node, args);
+    }
     else if (strcmp(node->op_type, "Squeeze") == 0) {
         _convert_squeeze(dst, src, node, args);
     }
@@ -464,16 +515,16 @@ static void _convert_node(struct sf_graph *dst, Onnx__GraphProto *src,
         _convert_transpose(dst, src, node, args);
     }
     else if (strcmp(node->op_type, "ReduceSum") == 0) {
-        _convert_reduce(dst, src, node, args, REDUCE_SUM);
+        _convert_reduce(dst, src, node, args, OP_REDUCE_SUM);
     }
     else if (strcmp(node->op_type, "ReduceMean") == 0) {
-        _convert_reduce(dst, src, node, args, REDUCE_MEAN);
+        _convert_reduce(dst, src, node, args, OP_REDUCE_AVG);
     }
     else if (strcmp(node->op_type, "ReduceMax") == 0) {
-        _convert_reduce(dst, src, node, args, REDUCE_MAX);
+        _convert_reduce(dst, src, node, args, OP_REDUCE_MAX);
     }
     else if (strcmp(node->op_type, "ReduceMin") == 0) {
-        _convert_reduce(dst, src, node, args, REDUCE_MIN);
+        _convert_reduce(dst, src, node, args, OP_REDUCE_MIN);
     }
     else if (strcmp(node->op_type, "Constant") == 0) {
         _convert_constant(dst, src, node, args);
@@ -506,20 +557,23 @@ struct sf_graph *sf_load_graph_from_onnx(const char *path)
         struct sf_graph *dst = sf_create_graph();
         struct sf_list *names = sf_create_list();
 
-        // convert input and weights
+        // convert inputs
         for (int i=0; i<src->n_input; i++) {
-            const char *name = src->input[i]->name;
-            Onnx__TensorProto *init = _get_init_by_name(src, name);
-            struct sf_tensor_desc desc = {SF_UNKNOWN};
-
-            if (init != NULL) { // constant node
-                void *data = NULL;
-                _get_tensor_info(init, &desc, &data);
-                sf_create_const_node(dst, desc, data);
-            } else {            // input node
+            char *name = src->input[i]->name;
+            if (_get_init_by_name(src, name) == NULL) {
+                struct sf_tensor_desc desc = {SF_UNKNOWN};
                 sf_create_input_node(dst, name, desc);
+                sf_list_append(names, name);
             }
-            sf_list_append(names, (void*)name);
+        }
+
+        // convert weights
+        for (int i=0; i<src->n_initializer; i++) {
+            struct sf_tensor_desc desc = {SF_UNKNOWN};
+            void *data = NULL;
+            _get_tensor_info(src->initializer[i], &desc, &data);
+            sf_create_const_node(dst, desc, data);
+            sf_list_append(names, src->initializer[i]->name);
         }
 
         // convert other nodes
@@ -534,7 +588,7 @@ struct sf_graph *sf_load_graph_from_onnx(const char *path)
             sf_list_append(names, node->output[0]);
         }
 
-        // set outputs
+        // gather outputs
         for (int i=0; i<src->n_output; i++) {
             int idx = _find_name(names, src->output[i]->name);
             sf_list_append(dst->outputs, dst->nodes->buf[idx]);

@@ -41,7 +41,10 @@ enum sf_op_type
     OP_MUL,
     OP_DIV,
     OP_CONV,
-    OP_POOL,
+    OP_AVG_POOL,
+    OP_MAX_POOL,
+    OP_G_AVG_POOL,
+    OP_G_MAX_POOL,
     OP_BATCHNORM,
     OP_IDENTITY,
     OP_RELU,
@@ -49,34 +52,18 @@ enum sf_op_type
     OP_SOFTMAX,
     OP_SLICE,
     OP_CONCAT,
+    OP_FLATTEN,
     OP_SQUEEZE,
     OP_RESHAPE,
     OP_TRANSPOSE,
-    OP_REDUCE,
+    OP_REDUCE_SUM,
+    OP_REDUCE_AVG,
+    OP_REDUCE_VAR,
+    OP_REDUCE_STD,
+    OP_REDUCE_MIN,
+    OP_REDUCE_MAX,
     OP_CAST,
     OP_GEMM,
-};
-
-
-// pooling type
-enum sf_pool_type
-{
-    POOL_AVG,
-    POOL_MAX,
-    POOL_GLOBAL_AVG,
-    POOL_GLOBAL_MAX,
-};
-
-
-// reduce op type
-enum sf_reduce_type
-{
-    REDUCE_SUM,
-    REDUCE_MEAN,
-    REDUCE_VAR,
-    REDUCE_STD,
-    REDUCE_MAX,
-    REDUCE_MIN,
 };
 
 
@@ -122,7 +109,6 @@ struct sf_node
             int pad_h0, pad_h1, pad_w0, pad_w1;
             int stride_h, stride_w;
             int kernel_h, kernel_w;
-            enum sf_pool_type type;
             char layout[SF_MAX_DIMS];
         } pool_attrs;
 
@@ -131,19 +117,15 @@ struct sf_node
             char layout[SF_MAX_DIMS];
         } bn_attrs;
 
-        struct {    // softmax node
+        struct {    // softmax, concat, flatten
             int axis;
-        } softmax_attrs;
+        } axis_attrs;
 
         struct {    // slice node
             int num_dims;
             int start[SF_MAX_DIMS];
             int shape[SF_MAX_DIMS];
         } slice_attrs;
-
-        struct {    // concatenate node
-            int axis;
-        } concat_attrs;
 
         struct {    // squeeze node
             int num_axes;
@@ -164,7 +146,6 @@ struct sf_node
             int num_axes;
             int axes[SF_MAX_DIMS];
             int keep_dims;
-            enum sf_reduce_type type;
         } reduce_attrs;
 
         struct {    // cast node
@@ -220,7 +201,11 @@ struct sf_node *sf_create_conv_node(struct sf_graph *graph, struct sf_node *x, s
 struct sf_node *sf_create_pool_node(struct sf_graph *graph, struct sf_node *x,
                                     int pad_h0, int pad_h1, int pad_w0, int pad_w1,
                                     int stride_h, int stride_w, int kernel_h, int kernel_w,
-                                    enum sf_pool_type pool_type, const char *layout);
+                                    enum sf_op_type pool_type, const char *layout);
+
+// create a new global pooling node
+struct sf_node *sf_create_global_pool_node(struct sf_graph *graph, struct sf_node *x,
+                                           enum sf_op_type pool_type, const char *layout);
 
 // create a new batch-norm node
 struct sf_node *sf_create_batchnorm_node(struct sf_graph *graph, struct sf_node *data,
@@ -248,6 +233,9 @@ struct sf_node *sf_create_slice_node(struct sf_graph *graph, struct sf_node *x,
 struct sf_node *sf_create_concat_node(struct sf_graph *graph, int axis,
                                       int num_args, struct sf_node **args);
 
+// create a new flatten node
+struct sf_node *sf_create_flatten_node(struct sf_graph *graph, struct sf_node *x, int axis);
+
 // create a new squeeze node
 struct sf_node *sf_create_squeeze_node(struct sf_graph *graph, struct sf_node *x,
                                        int num_axes, const int *axes);
@@ -262,7 +250,7 @@ struct sf_node *sf_create_transpose_node(struct sf_graph *graph, struct sf_node 
 
 // create a new reduce op node
 struct sf_node *sf_create_reduce_node(struct sf_graph *graph, struct sf_node *x, int num_axes,
-                                      const int *axes, int keep_dims, enum sf_reduce_type type);
+                                      const int *axes, int keep_dims, enum sf_op_type type);
 
 // create a new cast node
 struct sf_node *sf_create_cast_node(struct sf_graph *graph, struct sf_node *x, enum sf_data_type dtype);
