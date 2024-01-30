@@ -9,8 +9,8 @@
 // head of a memory block
 struct mem_block
 {
-    // size = MIN_SIZE << rank
-    int rank, _pad[3];
+    struct sf_list *recycler;   // where to return this memory block
+    int64_t ref_cnt;            // reference counter for shared memory
 };
 
 
@@ -21,7 +21,7 @@ struct sf_allocator
 };
 
 
-// get rank by size
+// size <= (MIN_SIZE << rank)
 static int _get_rank(size_t size)
 {
     size_t space = MIN_SIZE;
@@ -32,15 +32,6 @@ static int _get_rank(size_t size)
         rank++;
     }
     return rank;
-}
-
-
-// allocate a new memory block from system
-static struct mem_block *_create_mem_block(int rank)
-{
-    struct mem_block *block = malloc(sizeof(struct mem_block) + (MIN_SIZE << rank));
-    block->rank = rank;
-    return block;
 }
 
 
@@ -77,26 +68,52 @@ void *sf_malloc(struct sf_allocator *alloc, size_t size)
     if (size > 0) {
         const int rank = _get_rank(size);
         struct sf_list *list = alloc->idle[rank];
+        struct mem_block *block;
 
         if (list->cnt > 0) {
-            struct mem_block *block = list->buf[--(list->cnt)];
-            return block + 1;
+            block = list->buf[--(list->cnt)];
         } else {
-            struct mem_block *block = _create_mem_block(rank);
+            block = malloc(sizeof(struct mem_block) + (MIN_SIZE << rank));
             sf_list_append(alloc->all, block);
-            return block + 1;
         }
+        block->recycler = list;
+        block->ref_cnt = 0;
+        return block + 1;
     }
     return NULL;
 }
 
 
 // return memory back to allocator
-void sf_free(struct sf_allocator *alloc, void *buf)
+void sf_free(void *buf)
 {
-    if ((alloc != NULL) && (buf != NULL)) {
+    if (buf != NULL) {
         struct mem_block *block = (struct mem_block*)buf - 1;
-        sf_list_append(alloc->idle[block->rank], block);
+        sf_list_append(block->recycler, block);
     }
 }
+
+
+// increase ref cnt of shared memory
+void sf_shared_memory_inc(void *buf)
+{
+    if (buf != NULL) {
+        struct mem_block *block = (struct mem_block*)buf - 1;
+        block->ref_cnt += 1;
+    }
+}
+
+
+// decrease ref cnt of shared memory, free memory when ref cnt < 1
+void sf_shared_memory_dec(void *buf)
+{
+    if (buf != NULL) {
+        struct mem_block *block = (struct mem_block*)buf - 1;
+        block->ref_cnt -= 1;
+        if (block->ref_cnt < 1) {
+            sf_list_append(block->recycler, block);
+        }
+    }
+}
+
 

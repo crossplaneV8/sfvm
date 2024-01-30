@@ -51,7 +51,7 @@ static void _get_tensor_info(Onnx__TensorProto *init, struct sf_tensor_desc *des
 {
     if (init->has_data_type) {
         switch (init->data_type) {
-            case ONNX__TENSOR_PROTO__DATA_TYPE__INT8:       desc->dtype = SF_INT8; break;
+            case ONNX__TENSOR_PROTO__DATA_TYPE__INT8:       desc->dtype = SF_INT8;  break;
             case ONNX__TENSOR_PROTO__DATA_TYPE__INT16:      desc->dtype = SF_INT16; break;
             case ONNX__TENSOR_PROTO__DATA_TYPE__INT32:      desc->dtype = SF_INT32; break;
             case ONNX__TENSOR_PROTO__DATA_TYPE__INT64:      desc->dtype = SF_INT64; break;
@@ -312,7 +312,6 @@ static void _convert_flatten(struct sf_graph *dst, Onnx__GraphProto *src,
 {
     assert(node->n_input == 1);
     assert(node->n_output == 1);
-
     int axis = 1;
 
     for (int i=0; i<node->n_attribute; i++) {
@@ -363,21 +362,35 @@ static void _convert_squeeze(struct sf_graph *dst, Onnx__GraphProto *src,
 static void _convert_reshape(struct sf_graph *dst, Onnx__GraphProto *src,
                              Onnx__NodeProto *node, struct sf_node **args)
 {
-    assert(node->n_input == 2);
+    assert(node->n_input >= 1 && node->n_input <= 2);
     assert(node->n_output == 1);
 
-    if (args[1]->op_type == OP_CONST) {
-        const struct sf_tensor_desc desc = args[1]->o_desc;
-        assert(desc.dtype == SF_INT64 && desc.num_dims == 1);
-        const int64_t *data = args[1]->const_attrs.data;
-        int shape[SF_MAX_DIMS], num = desc.shape[0];
-        for (int i=0; i<num; i++) {
-            shape[i] = (int)(data[i]);
+    int num = 0, shape[SF_MAX_DIMS] = {0};
+
+    for (int i=0; i<node->n_attribute; i++) {
+        Onnx__AttributeProto *attr = node->attribute[i];
+
+        if (strcmp(attr->name, "shape") == 0) {
+            num = attr->n_ints;
+            for (int j=0; j<num; j++) {
+                shape[j] = (int)(attr->ints[j]);
+            }
         }
-        sf_create_reshape_node(dst, args[0], num, shape);
-    } else {
-        printf("reshape node does not support non-constant shape"); abort();
     }
+    if (node->n_input == 2) {
+        if (args[1]->op_type == OP_CONST) {
+            const struct sf_tensor_desc desc = args[1]->o_desc;
+            assert(desc.dtype == SF_INT64 && desc.num_dims == 1);
+            const int64_t *data = args[1]->const_attrs.data;
+            num = desc.shape[0];
+            for (int i=0; i<num; i++) {
+                shape[i] = (int)(data[i]);
+            }
+        } else {
+            printf("reshape node does not support non-constant shape"); abort();
+        }
+    }
+    sf_create_reshape_node(dst, args[0], num, shape);
 }
 
 
@@ -407,7 +420,7 @@ static void _convert_reduce(struct sf_graph *dst, Onnx__GraphProto *src,
                             Onnx__NodeProto *node, struct sf_node **args,
                             enum sf_op_type type)
 {
-    assert(node->n_input == 1);
+    assert(node->n_input >= 1 && node->n_input <= 2);
     assert(node->n_output == 1);
 
     int num_axes = 0;
@@ -425,6 +438,19 @@ static void _convert_reduce(struct sf_graph *dst, Onnx__GraphProto *src,
         }
         if (strcmp(attr->name, "keepdims") == 0) {
             keep_dims = (int)(attr->i);
+        }
+    }
+    if (node->n_input == 2) {
+        if (args[1]->op_type == OP_CONST) {
+            const struct sf_tensor_desc desc = args[1]->o_desc;
+            assert(desc.dtype == SF_INT64 && desc.num_dims == 1);
+            const int64_t *data = args[1]->const_attrs.data;
+            num_axes = desc.shape[0];
+            for (int i=0; i<num_axes; i++) {
+                axes[i] = (int)(data[i]);
+            }
+        } else {
+            printf("reduce node does not support non-constant axes"); abort();
         }
     }
     sf_create_reduce_node(dst, args[0], num_axes, axes, keep_dims, type);
@@ -572,7 +598,10 @@ struct sf_graph *sf_load_graph_from_onnx(const char *path)
             struct sf_tensor_desc desc = {SF_UNKNOWN};
             void *data = NULL;
             _get_tensor_info(src->initializer[i], &desc, &data);
-            sf_create_const_node(dst, desc, data);
+            size_t size = sf_tensor_size(desc);
+            void *buf = sf_malloc(dst->alloc, size);
+            memcpy(buf, data, size);
+            sf_create_const_node(dst, desc, buf);
             sf_list_append(names, src->initializer[i]->name);
         }
 

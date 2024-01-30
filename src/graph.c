@@ -161,7 +161,7 @@ static void _infer_slice(struct sf_node *node)
 static void _infer_concat(struct sf_node *node)
 {
     struct sf_tensor_desc desc = node->args[0]->o_desc;
-    const int axis = node->axis_attrs.axis;
+    int axis = (node->axis_attrs.axis + desc.num_dims) % desc.num_dims;
 
     for (int i=1; i<node->num_args; i++) {
         desc.shape[axis] += node->args[i]->o_desc.shape[axis];
@@ -174,7 +174,8 @@ static void _infer_squeeze(struct sf_node *node)
 {
     struct sf_tensor_desc desc = node->args[0]->o_desc;
     for (int i=0; i<node->squeeze_attrs.num_axes; i++) {
-        desc.shape[node->squeeze_attrs.axes[i]] = 0;
+        int axis = (node->squeeze_attrs.axes[i] + desc.num_dims) % desc.num_dims;
+        desc.shape[axis] = 0;
     }
     int cnt = 0;
     for (int i=0; i<desc.num_dims; i++) {
@@ -190,7 +191,7 @@ static void _infer_squeeze(struct sf_node *node)
 static void _infer_flatten(struct sf_node *node)
 {
     struct sf_tensor_desc desc = node->args[0]->o_desc;
-    const int axis = node->axis_attrs.axis;
+    int axis = (node->axis_attrs.axis + desc.num_dims) % desc.num_dims;
     int n = 1, c = 1;
     for (int i=0; i<axis; i++) {
         n *= desc.shape[i];
@@ -207,10 +208,28 @@ static void _infer_flatten(struct sf_node *node)
 
 static void _infer_reshape(struct sf_node *node)
 {
-    node->o_desc.dtype = node->args[0]->o_desc.dtype;
+    int64_t prod = 1, axis = -1;
+    for (int i=0; i<node->reshape_attrs.num_dims; i++) {
+        if (node->reshape_attrs.shape[i] > 0) {
+            prod *= node->reshape_attrs.shape[i];
+        } else {
+            axis = i;
+        }
+    }
+
+    struct sf_tensor_desc x_desc = node->args[0]->o_desc;
+    node->o_desc.dtype = x_desc.dtype;
     node->o_desc.num_dims = node->reshape_attrs.num_dims;
+
     for (int i=0; i<node->reshape_attrs.num_dims; i++) {
         node->o_desc.shape[i] = node->reshape_attrs.shape[i];
+    }
+    if (axis >= 0) {
+        int64_t size = 1;
+        for (int i=0; i<x_desc.num_dims; i++) {
+            size *= x_desc.shape[i];
+        }
+        node->o_desc.shape[axis] = (int)(size / prod);
     }
 }
 
@@ -230,16 +249,17 @@ static void _infer_reduce(struct sf_node *node)
 {
     struct sf_tensor_desc desc = node->args[0]->o_desc;
     for (int i=0; i<node->reduce_attrs.num_axes; i++) {
-        desc.shape[node->reduce_attrs.axes[i]] = node->reduce_attrs.keep_dims ? 1 : 0;
+        int axis = (node->reduce_attrs.axes[i] + desc.num_dims) % desc.num_dims;
+        desc.shape[axis] = node->reduce_attrs.keep_dims ? 1 : 0;
     }
-    int cnt = 0;
+    node->o_desc.dtype = desc.dtype;
+    node->o_desc.num_dims = 0;
+
     for (int i=0; i<desc.num_dims; i++) {
         if (desc.shape[i] > 0) {
-            desc.shape[cnt++] = desc.shape[i];
+            node->o_desc.shape[node->o_desc.num_dims++] = desc.shape[i];
         }
     }
-    desc.num_dims = cnt;
-    node->o_desc = desc;
 }
 
 
@@ -267,100 +287,79 @@ static void _infer_gemm(struct sf_node *node)
 }
 
 
+// infer data type and shape of a node
+static void _infer_tensor_desc(struct sf_node *node)
+{
+    for (int i=0; i<node->num_args; i++) {
+        if (node->args[i]->o_desc.dtype == SF_UNKNOWN) return;
+    }
+    switch (node->op_type) {
+        case OP_UNKNOWN:    break;
+        case OP_INPUT:      break;
+        case OP_CONST:      break;
+        case OP_ADD:        _infer_broadcast_op(node); break;
+        case OP_SUB:        _infer_broadcast_op(node); break;
+        case OP_MUL:        _infer_broadcast_op(node); break;
+        case OP_DIV:        _infer_broadcast_op(node); break;
+        case OP_CONV:       _infer_conv(node); break;
+        case OP_AVG_POOL:   _infer_pool(node); break;
+        case OP_MAX_POOL:   _infer_pool(node); break;
+        case OP_G_AVG_POOL: _infer_global_pool(node); break;
+        case OP_G_MAX_POOL: _infer_global_pool(node); break;
+        case OP_BATCHNORM:  _infer_activation(node); break;
+        case OP_IDENTITY:   _infer_activation(node); break;
+        case OP_RELU:       _infer_activation(node); break;
+        case OP_SIGMOID:    _infer_activation(node); break;
+        case OP_SOFTMAX:    _infer_activation(node); break;
+        case OP_SLICE:      _infer_slice(node); break;
+        case OP_CONCAT:     _infer_concat(node); break;
+        case OP_FLATTEN:    _infer_flatten(node); break;
+        case OP_SQUEEZE:    _infer_squeeze(node); break;
+        case OP_RESHAPE:    _infer_reshape(node); break;
+        case OP_TRANSPOSE:  _infer_transpose(node); break;
+        case OP_REDUCE_SUM: _infer_reduce(node); break;
+        case OP_REDUCE_AVG: _infer_reduce(node); break;
+        case OP_REDUCE_VAR: _infer_reduce(node); break;
+        case OP_REDUCE_STD: _infer_reduce(node); break;
+        case OP_REDUCE_MIN: _infer_reduce(node); break;
+        case OP_REDUCE_MAX: _infer_reduce(node); break;
+        case OP_CAST:       _infer_cast(node); break;
+        case OP_GEMM:       _infer_gemm(node); break;
+    }
+}
+
+
+// infer tensor descriptor recursively with a memo map
+static void _infer_tensor_desc_dfs(struct sf_node *node, struct sf_dict *memo)
+{
+    if (sf_read_dict(memo, node) == NULL) {
+        for (int i=0; i<node->num_args; i++) {
+            struct sf_node *arg = node->args[i];
+            if (arg->o_desc.dtype == SF_UNKNOWN) {
+                _infer_tensor_desc_dfs(arg, memo);
+            }
+        }
+        _infer_tensor_desc(node);
+        sf_write_dict(memo, node, node);
+    }
+}
+
+
+// infer tensor descriptor of a node recursively
+void sf_infer_tensor_desc_dfs(struct sf_node *node)
+{
+    struct sf_dict *memo = sf_create_dict();
+    _infer_tensor_desc_dfs(node, memo);
+    sf_discard_dict(memo);
+}
+
+
 // infer data type and shape of all nodes in the graph
-void sf_infer_graph(struct sf_graph *graph)
+void sf_graph_infer_tensor_desc(struct sf_graph *graph)
 {
     for (int i=0; i<graph->nodes->cnt; i++) {
-        struct sf_node *node = graph->nodes->buf[i];
-        switch (node->op_type) {
-            case OP_UNKNOWN:    break;
-            case OP_INPUT:      break;
-            case OP_CONST:      break;
-            case OP_ADD:        _infer_broadcast_op(node); break;
-            case OP_SUB:        _infer_broadcast_op(node); break;
-            case OP_MUL:        _infer_broadcast_op(node); break;
-            case OP_DIV:        _infer_broadcast_op(node); break;
-            case OP_CONV:       _infer_conv(node); break;
-            case OP_AVG_POOL:   _infer_pool(node); break;
-            case OP_MAX_POOL:   _infer_pool(node); break;
-            case OP_G_AVG_POOL: _infer_global_pool(node); break;
-            case OP_G_MAX_POOL: _infer_global_pool(node); break;
-            case OP_BATCHNORM:  _infer_activation(node); break;
-            case OP_IDENTITY:   _infer_activation(node); break;
-            case OP_RELU:       _infer_activation(node); break;
-            case OP_SIGMOID:    _infer_activation(node); break;
-            case OP_SOFTMAX:    _infer_activation(node); break;
-            case OP_SLICE:      _infer_slice(node); break;
-            case OP_CONCAT:     _infer_concat(node); break;
-            case OP_FLATTEN:    _infer_flatten(node); break;
-            case OP_SQUEEZE:    _infer_squeeze(node); break;
-            case OP_RESHAPE:    _infer_reshape(node); break;
-            case OP_TRANSPOSE:  _infer_transpose(node); break;
-            case OP_REDUCE_SUM: _infer_reduce(node); break;
-            case OP_REDUCE_AVG: _infer_reduce(node); break;
-            case OP_REDUCE_VAR: _infer_reduce(node); break;
-            case OP_REDUCE_STD: _infer_reduce(node); break;
-            case OP_REDUCE_MIN: _infer_reduce(node); break;
-            case OP_REDUCE_MAX: _infer_reduce(node); break;
-            case OP_CAST:       _infer_cast(node); break;
-            case OP_GEMM:       _infer_gemm(node); break;
-        }
+        _infer_tensor_desc(graph->nodes->buf[i]);
     }
-}
-
-
-static const char *_get_dtype_name(enum sf_data_type dtype)
-{
-    switch (dtype) {
-        case SF_UNKNOWN:    return "unknown";
-        case SF_FLOAT16:    return "f16";
-        case SF_FLOAT32:    return "f32";
-        case SF_FLOAT64:    return "f64";
-        case SF_INT8:       return "i8";
-        case SF_INT16:      return "i16";
-        case SF_INT32:      return "i32";
-        case SF_INT64:      return "i64";
-    }
-    return "unknown";
-}
-
-
-static const char *_get_op_name(struct sf_node *node)
-{
-    switch (node->op_type) {
-        case OP_UNKNOWN:    return "unknown";
-        case OP_INPUT:      return "input";
-        case OP_CONST:      return "const";
-        case OP_ADD:        return "add";
-        case OP_SUB:        return "sub";
-        case OP_MUL:        return "mul";
-        case OP_DIV:        return "div";
-        case OP_CONV:       return "conv";
-        case OP_AVG_POOL:   return "avgpool";
-        case OP_MAX_POOL:   return "maxpool";
-        case OP_G_AVG_POOL: return "global_avgpool";
-        case OP_G_MAX_POOL: return "global_maxpool";
-        case OP_BATCHNORM:  return "batchnorm";
-        case OP_IDENTITY:   return "identity";
-        case OP_RELU:       return "relu";
-        case OP_SIGMOID:    return "sigmoid";
-        case OP_SOFTMAX:    return "softmax";
-        case OP_SLICE:      return "slice";
-        case OP_CONCAT:     return "concat";
-        case OP_FLATTEN:    return "flatten";
-        case OP_SQUEEZE:    return "squeeze";
-        case OP_RESHAPE:    return "reshape";
-        case OP_TRANSPOSE:  return "transpose";
-        case OP_REDUCE_SUM: return "reduce_sum";
-        case OP_REDUCE_AVG: return "reduce_avg";
-        case OP_REDUCE_VAR: return "reduce_var";
-        case OP_REDUCE_STD: return "reduce_std";
-        case OP_REDUCE_MIN: return "reduce_min";
-        case OP_REDUCE_MAX: return "reduce_max";
-        case OP_CAST:       return "cast";
-        case OP_GEMM:       return "gemm";
-    }
-    return "unknown";
 }
 
 
@@ -387,7 +386,7 @@ static void _print_op_attr(FILE *f, struct sf_node *node)
         case OP_CONST: {
             fprintf(f, "shape: ");
             _print_shape(f, node->o_desc.num_dims, node->o_desc.shape);
-            fprintf(f, ", dtype: %s", _get_dtype_name(node->o_desc.dtype));
+            fprintf(f, ", dtype: %s", sf_get_dtype_name(node->o_desc.dtype));
             break;
         }
         case OP_ADD:        break;
@@ -395,25 +394,25 @@ static void _print_op_attr(FILE *f, struct sf_node *node)
         case OP_MUL:        break;
         case OP_DIV:        break;
         case OP_CONV: {
-            fprintf(f, "data: %s, weight: %s, pads: [%d, %d, %d, %d], stride: [%d, %d], dilate: [%d, %d], has_relu: %s",
+            fprintf(f, "layout: %s %s, pads: [%d,%d,%d,%d], stride: [%d,%d], dilate: [%d,%d], relu: %s",
                     node->conv_attrs.x_layout, node->conv_attrs.w_layout, node->conv_attrs.pad_h0, node->conv_attrs.pad_h1,
                     node->conv_attrs.pad_w0, node->conv_attrs.pad_w1, node->conv_attrs.stride_h, node->conv_attrs.stride_w,
                     node->conv_attrs.dilate_h, node->conv_attrs.dilate_w, node->conv_attrs.has_relu ? "true" : "false");
             break;
         }
         case OP_AVG_POOL: case OP_MAX_POOL: {
-            fprintf(f, "data: %s, pads: [%d, %d, %d, %d], stride: [%d, %d], kernel: [%d, %d]",
+            fprintf(f, "layout: %s, pads: [%d,%d,%d,%d], stride: [%d,%d], kernel: [%d,%d]",
                     node->pool_attrs.layout, node->pool_attrs.pad_h0, node->pool_attrs.pad_h1,
                     node->pool_attrs.pad_w0, node->pool_attrs.pad_w1, node->pool_attrs.stride_h,
                     node->pool_attrs.stride_w, node->pool_attrs.kernel_h, node->pool_attrs.kernel_w);
             break;
         }
         case OP_G_AVG_POOL: case OP_G_MAX_POOL: {
-            fprintf(f, "data: %s", node->pool_attrs.layout);
+            fprintf(f, "layout: %s", node->pool_attrs.layout);
             break;
         }
         case OP_BATCHNORM: {
-            fprintf(f, "data: %s, epsilon: %g", node->bn_attrs.layout, node->bn_attrs.epsilon);
+            fprintf(f, "layout: %s, epsilon: %g", node->bn_attrs.layout, node->bn_attrs.epsilon);
             break;
         }
         case OP_IDENTITY:   break;
@@ -453,7 +452,7 @@ static void _print_op_attr(FILE *f, struct sf_node *node)
             break;
         }
         case OP_CAST: {
-            fprintf(f, "dtype: %s", _get_dtype_name(node->cast_attrs.dtype));
+            fprintf(f, "dtype: %s", sf_get_dtype_name(node->cast_attrs.dtype));
             break;
         }
         case OP_GEMM: {
@@ -473,11 +472,11 @@ void sf_print_graph(FILE *f, struct sf_graph *graph, int with_desc, int with_att
     for (int i=0; i<graph->nodes->cnt; i++) {
         struct sf_node *node = graph->nodes->buf[i];
         if (with_desc) {
-            fprintf(f, "%s", _get_dtype_name(node->o_desc.dtype));
+            fprintf(f, "%s", sf_get_dtype_name(node->o_desc.dtype));
             _print_shape(f, node->o_desc.num_dims, node->o_desc.shape);
             fprintf(f, " ");
         }
-        fprintf(f, "%%%d = %s(", i, _get_op_name(node));
+        fprintf(f, "%%%d = %s(", i, sf_get_op_name(node));
         for (int j=0; j<node->num_args; j++) {
             int k = sf_list_find(graph->nodes, node->args[j]);
             fprintf(f, j ? ", %%%d" : "%%%d" , k);

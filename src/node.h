@@ -118,7 +118,7 @@ struct sf_node
         } bn_attrs;
 
         struct {    // softmax, concat, flatten
-            int axis;
+            int axis;   // allows negative
         } axis_attrs;
 
         struct {    // slice node
@@ -129,12 +129,12 @@ struct sf_node
 
         struct {    // squeeze node
             int num_axes;
-            int axes[SF_MAX_DIMS];
+            int axes[SF_MAX_DIMS];  // allows negative
         } squeeze_attrs;
 
         struct {    // reshape node
             int num_dims;
-            int shape[SF_MAX_DIMS];
+            int shape[SF_MAX_DIMS]; // allows -1
         } reshape_attrs;
 
         struct {    // transpose node
@@ -144,7 +144,7 @@ struct sf_node
 
         struct {    // reduce node
             int num_axes;
-            int axes[SF_MAX_DIMS];
+            int axes[SF_MAX_DIMS];  // allows negative
             int keep_dims;
         } reduce_attrs;
 
@@ -168,6 +168,12 @@ struct sf_graph
     struct sf_list *nodes;          // list of all graph nodes
 };
 
+
+// get string name of data type
+const char *sf_get_dtype_name(enum sf_data_type dtype);
+
+// get string name of node op type
+const char *sf_get_op_name(struct sf_node *node);
 
 // calculate tensor size (in bytes)
 size_t sf_tensor_size(struct sf_tensor_desc desc);

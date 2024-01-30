@@ -113,6 +113,19 @@ void sf_discard_dict(struct sf_dict *dict)
 }
 
 
+// clear hash table
+void sf_clear_dict(struct sf_dict *dict)
+{
+    int hash_size = 1 << dict->hash_bits;
+    for (int i=0; i<hash_size; i++) {
+        if (dict->rows[i] != NULL) {
+            dict->rows[i]->cnt = 0;
+        }
+    }
+    dict->item_cnt = 0;
+}
+
+
 static struct _hash_row *_create_hash_row(int len)
 {
     struct _hash_row *row = malloc(sizeof(struct _hash_row) +
@@ -139,6 +152,7 @@ static void _extend_dict(struct sf_dict *dict)
     struct _hash_row **old_rows = dict->rows;
     dict->rows = malloc(new_size * sizeof(void*));
     memset(dict->rows, 0, new_size * sizeof(void*));
+    dict->item_cnt = 0;
 
     for (int i=0; i<old_size; i++) {
         struct _hash_row *row = old_rows[i];

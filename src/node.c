@@ -2,11 +2,69 @@
 #include "node.h"
 
 
+// get string name of data type
+const char *sf_get_dtype_name(enum sf_data_type dtype)
+{
+    switch (dtype) {
+        case SF_UNKNOWN:        return "unknown";
+        case SF_FLOAT16:        return "f16";
+        case SF_FLOAT32:        return "f32";
+        case SF_FLOAT64:        return "f64";
+        case SF_INT8:           return "i8";
+        case SF_INT16:          return "i16";
+        case SF_INT32:          return "i32";
+        case SF_INT64:          return "i64";
+    }
+    return "unknown";
+}
+
+
+// get string name of node op type
+const char *sf_get_op_name(struct sf_node *node)
+{
+    switch (node->op_type) {
+        case OP_UNKNOWN:        return "unknown";
+        case OP_INPUT:          return "input";
+        case OP_CONST:          return "const";
+        case OP_ADD:            return "add";
+        case OP_SUB:            return "sub";
+        case OP_MUL:            return "mul";
+        case OP_DIV:            return "div";
+        case OP_CONV:           return "conv";
+        case OP_AVG_POOL:       return "avgpool";
+        case OP_MAX_POOL:       return "maxpool";
+        case OP_G_AVG_POOL:     return "global_avgpool";
+        case OP_G_MAX_POOL:     return "global_maxpool";
+        case OP_BATCHNORM:      return "batchnorm";
+        case OP_IDENTITY:       return "identity";
+        case OP_RELU:           return "relu";
+        case OP_SIGMOID:        return "sigmoid";
+        case OP_SOFTMAX:        return "softmax";
+        case OP_SLICE:          return "slice";
+        case OP_CONCAT:         return "concat";
+        case OP_FLATTEN:        return "flatten";
+        case OP_SQUEEZE:        return "squeeze";
+        case OP_RESHAPE:        return "reshape";
+        case OP_TRANSPOSE:      return "transpose";
+        case OP_REDUCE_SUM:     return "reduce_sum";
+        case OP_REDUCE_AVG:     return "reduce_avg";
+        case OP_REDUCE_VAR:     return "reduce_var";
+        case OP_REDUCE_STD:     return "reduce_std";
+        case OP_REDUCE_MIN:     return "reduce_min";
+        case OP_REDUCE_MAX:     return "reduce_max";
+        case OP_CAST:           return "cast";
+        case OP_GEMM:           return "gemm";
+    }
+    return "unknown";
+}
+
+
 // calculate tensor size (in bytes)
 size_t sf_tensor_size(struct sf_tensor_desc desc)
 {
     size_t size = 0;
     switch (desc.dtype) {
+        case SF_UNKNOWN:    size = 0; break;
         case SF_FLOAT16:    size = 2; break;
         case SF_FLOAT32:    size = 4; break;
         case SF_FLOAT64:    size = 8; break;
@@ -14,7 +72,6 @@ size_t sf_tensor_size(struct sf_tensor_desc desc)
         case SF_INT16:      size = 2; break;
         case SF_INT32:      size = 4; break;
         case SF_INT64:      size = 8; break;
-        default:;
     }
     for (int i=0; i<desc.num_dims; i++) {
         size *= (size_t)desc.shape[i];
@@ -50,7 +107,8 @@ struct sf_node *sf_create_const_node(struct sf_graph *graph, struct sf_tensor_de
     struct sf_node *node = _sf_create_node(graph);
     node->op_type = OP_CONST;
     node->o_desc = desc;
-    node->const_attrs.data = data;      // shallow copy
+    node->const_attrs.data = data;
+    sf_shared_memory_inc(data);
     return node;
 }
 

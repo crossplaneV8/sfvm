@@ -44,6 +44,9 @@ struct sf_dict *sf_create_dict(void);
 // discard an existing hash table
 void sf_discard_dict(struct sf_dict *dict);
 
+// clear hash table
+void sf_clear_dict(struct sf_dict *dict);
+
 // write hash table
 void sf_write_dict(struct sf_dict *dict, void *key, void *val);
 
