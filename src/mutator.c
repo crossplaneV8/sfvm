@@ -1,4 +1,6 @@
 
+#include <math.h>
+
 #include "mutator.h"
 
 
@@ -23,81 +25,32 @@ struct sf_node *sf_mutator_map(struct sf_mutator *mut, struct sf_node *node)
 }
 
 
-// clone an existing node with same type and attributes
-struct sf_node *sf_clone_node(struct sf_graph *graph, struct sf_node *node,
-                              struct sf_node **new_args)
-{
-    struct sf_node *new_node = sf_malloc(graph->alloc, sizeof(struct sf_node));
-    memcpy(new_node, node, sizeof(struct sf_node));
-
-    for (int i=0; i<node->num_args; i++) {
-        new_node->args[i] = new_args[i];
-    }
-    if (node->op_type == OP_CONST) {
-        sf_shared_memory_inc(node->const_attrs.data);
-    }
-    return new_node;
-}
-
-
-// clone nodes recursively
-struct sf_node *sf_identity_transform(struct sf_mutator *mut, struct sf_node *node)
-{
-    struct sf_node *new_args[SF_MAX_ARGS];
-    for (int i=0; i<node->num_args; i++) {
-        new_args[i] = sf_mutator_map(mut, node->args[i]);
-    }
-    return sf_clone_node(mut->graph, node, new_args);
-}
-
-
-// free all nodes in the list
-static void _clear_nodes(struct sf_list *nodes)
-{
-    for (int i=0; i<nodes->cnt; i++) {
-        struct sf_node *node = nodes->buf[i];
-        if (node->op_type == OP_CONST) {
-            sf_shared_memory_dec(node->const_attrs.data);
-        }
-        sf_free(node);
-    }
-    nodes->cnt = 0;
-}
-
-
-// visit graph nodes in DFS order
-static void _topo_sort(struct sf_list *list, struct sf_node *node)
-{
-    if (sf_list_find(list, node) < 0) {
-        for (int i=0; i<node->num_args; i++) {
-            _topo_sort(list, node->args[i]);
-        }
-        sf_list_append(list, node);
-    }
-}
-
-
 // run mutator
 static void sf_mutator_run(struct sf_mutator *mut)
 {
     struct sf_list *old_outs = mut->graph->outputs;
-    struct sf_list *new_outs = sf_create_list();
+    struct sf_list *old_nodes = mut->graph->nodes;
+    mut->graph->outputs = sf_create_list();
+    mut->graph->nodes = sf_create_list();
+
     sf_clear_dict(mut->memo_map);
 
     // generate new outs from old graph
     for (int i=0; i<old_outs->cnt; i++) {
-        sf_list_append(new_outs, sf_mutator_map(mut, old_outs->buf[i]));
+        struct sf_node *node = sf_mutator_map(mut, old_outs->buf[i]);
+        sf_list_append(mut->graph->outputs, node);
     }
 
-    // replace old outs with new ones
+    // free memory
+    for (int i=0; i<old_nodes->cnt; i++) {
+        struct sf_node *node = old_nodes->buf[i];
+        if (node->op_type == OP_CONST) {
+            sf_shared_memory_dec(node->const_attrs.shared_data);
+        }
+        sf_free(node);
+    }
+    sf_discard_list(old_nodes);
     sf_discard_list(old_outs);
-    mut->graph->outputs = new_outs;
-
-    // replace old nodes with new ones
-    _clear_nodes(mut->graph->nodes);
-    for (int i=0; i<new_outs->cnt; i++) {
-        _topo_sort(mut->graph->nodes, new_outs->buf[i]);
-    }
 }
 
 
@@ -113,6 +66,99 @@ void sf_run_graph_transforms(struct sf_graph *graph, int num,
         sf_mutator_run(&mut);
     }
     sf_discard_dict(memo);
+}
+
+
+// mapping a graph to another equivalent graph (identity transform)
+struct sf_node *sf_identity_transform(struct sf_mutator *mut, struct sf_node *node)
+{
+    struct sf_node *new_args[SF_MAX_ARGS];
+    for (int i=0; i<node->num_args; i++) {
+        new_args[i] = sf_mutator_map(mut, node->args[i]);
+    }
+    return sf_clone_node(mut->graph, node, new_args);
+}
+
+
+// merge consecutive nodes
+struct sf_node *sf_merge_consecutive_nodes(struct sf_mutator *mut, struct sf_node *node)
+{
+    struct sf_node *new_args[SF_MAX_ARGS];
+    for (int i=0; i<node->num_args; i++) {
+        new_args[i] = sf_mutator_map(mut, node->args[i]);
+    }
+
+    // reshape(reshape(x)) ==> reshape(x)
+    if (node->op_type == OP_RESHAPE) {
+        struct sf_node *arg = new_args[0];
+        if (arg->op_type == OP_RESHAPE) {
+            return sf_create_reshape_node(mut->graph, arg->args[0],
+                                          node->reshape_attrs.num_dims,
+                                          node->reshape_attrs.shape);
+        }
+    }
+
+    // transpose(transpose(x)) ==> transpose(x)
+    if (node->op_type == OP_TRANSPOSE) {
+        struct sf_node *arg = new_args[0];
+        if (arg->op_type == OP_TRANSPOSE) {
+            int axes[SF_MAX_DIMS], num = node->transpose_attrs.num_dims;
+            for (int i=0; i<num; i++) {
+                axes[i] = arg->transpose_attrs.axes[node->transpose_attrs.axes[i]];
+            }
+            for (int i=0; i<num; i++) {
+                if (axes[i] != i) {
+                    return sf_create_transpose_node(mut->graph, arg->args[0], num, axes);
+                }
+            }
+            return arg->args[0];
+        }
+    }
+    return sf_clone_node(mut->graph, node, new_args);
+}
+
+
+// convert batch-norm to mul and add node
+struct sf_node *sf_batchnorm_to_mul_add(struct sf_mutator *mut, struct sf_node *node)
+{
+    struct sf_node *new_args[SF_MAX_ARGS];
+    for (int i=0; i<node->num_args; i++) {
+        new_args[i] = sf_mutator_map(mut, node->args[i]);
+    }
+
+    if (node->op_type == OP_BATCHNORM) {
+        if (new_args[1]->op_type == OP_CONST && new_args[1]->const_attrs.data_desc.dtype == SF_FLOAT32
+         && new_args[2]->op_type == OP_CONST && new_args[2]->const_attrs.data_desc.dtype == SF_FLOAT32
+         && new_args[3]->op_type == OP_CONST && new_args[3]->const_attrs.data_desc.dtype == SF_FLOAT32
+         && new_args[4]->op_type == OP_CONST && new_args[4]->const_attrs.data_desc.dtype == SF_FLOAT32) {
+            const int num = new_args[1]->const_attrs.data_desc.shape[0];
+            const float *scale = new_args[1]->const_attrs.shared_data;
+            const float *bias = new_args[2]->const_attrs.shared_data;
+            const float *mean = new_args[3]->const_attrs.shared_data;
+            const float *var = new_args[4]->const_attrs.shared_data;
+
+            float *new_scale = sf_malloc(mut->graph->alloc, num * sizeof(float));
+            float *new_bias = sf_malloc(mut->graph->alloc, num * sizeof(float));
+            const float epsilon = node->bn_attrs.epsilon;
+
+            for (int i=0; i<num; i++) {
+                new_scale[i] = scale[i] / sqrt(var[i] + epsilon);
+                new_bias[i] = bias[i] - new_scale[i] * mean[i];
+            }
+            struct sf_tensor_desc desc = {SF_FLOAT32, 4, {1, 1, 1, 1}};
+            for (int i=0; i<4; i++) {
+                if (node->bn_attrs.layout[i] == 'C') {
+                    desc.shape[i] = num; break;
+                }
+            }
+            struct sf_node *alpha = sf_create_const_node(mut->graph, desc, new_scale);
+            struct sf_node *beta = sf_create_const_node(mut->graph, desc, new_bias);
+            struct sf_node *mul = sf_create_mul_node(mut->graph, new_args[0], alpha);
+            struct sf_node *add = sf_create_add_node(mut->graph, mul, beta);
+            return add;
+        }
+    }
+    return sf_clone_node(mut->graph, node, new_args);
 }
 
 

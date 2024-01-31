@@ -23,6 +23,11 @@ void sf_run_graph_transforms(struct sf_graph *graph, int num,
 // clone nodes recursively
 struct sf_node *sf_identity_transform(struct sf_mutator *mut, struct sf_node *node);
 
+// merge consecutive nodes
+struct sf_node *sf_merge_consecutive_nodes(struct sf_mutator *mut, struct sf_node *node);
+
+// convert batch-norm to mul and add node
+struct sf_node *sf_batchnorm_to_mul_add(struct sf_mutator *mut, struct sf_node *node);
 
 
 #ifdef __cplusplus

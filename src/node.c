@@ -90,25 +90,48 @@ static struct sf_node *_sf_create_node(struct sf_graph *graph)
 }
 
 
+// clone an existing node into the graph
+struct sf_node *sf_clone_node(struct sf_graph *graph, struct sf_node *node,
+                              struct sf_node **new_args)
+{
+    struct sf_node *new_node = _sf_create_node(graph);
+    memcpy(new_node, node, sizeof(struct sf_node));
+    new_node->o_desc = (struct sf_tensor_desc){SF_UNKNOWN};
+
+    if (new_args != NULL) {
+        for (int i=0; i<node->num_args; i++) {
+            new_node->args[i] = new_args[i];
+        }
+        new_node->num_args = node->num_args;
+    } else {
+        new_node->num_args = 0;
+    }
+    if (node->op_type == OP_CONST) {
+        sf_shared_memory_inc(node->const_attrs.shared_data);
+    }
+    return new_node;
+}
+
+
 // create a new input node
 struct sf_node *sf_create_input_node(struct sf_graph *graph, const char *name, struct sf_tensor_desc desc)
 {
     struct sf_node *node = _sf_create_node(graph);
     node->op_type = OP_INPUT;
-    node->o_desc = desc;
     strcpy(node->input_attrs.name, name);
+    node->input_attrs.data_desc = desc;
     return node;
 }
 
 
 // create a new constant node
-struct sf_node *sf_create_const_node(struct sf_graph *graph, struct sf_tensor_desc desc, void *data)
+struct sf_node *sf_create_const_node(struct sf_graph *graph, struct sf_tensor_desc desc, void *shared_data)
 {
     struct sf_node *node = _sf_create_node(graph);
     node->op_type = OP_CONST;
-    node->o_desc = desc;
-    node->const_attrs.data = data;
-    sf_shared_memory_inc(data);
+    node->const_attrs.shared_data = shared_data;
+    node->const_attrs.data_desc = desc;
+    sf_shared_memory_inc(shared_data);
     return node;
 }
 

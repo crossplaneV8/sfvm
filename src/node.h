@@ -90,10 +90,12 @@ struct sf_node
     {
         struct {    // input node
             char name[SF_MAX_STR_LEN];
+            struct sf_tensor_desc data_desc;
         } input_attrs;
 
         struct {    // constant node
-            void *data;
+            void *shared_data;  // memory shared between nodes with a ref-cnt
+            struct sf_tensor_desc data_desc;
         } const_attrs;
 
         struct {    // convolution node
@@ -163,7 +165,7 @@ struct sf_node
 // DAG (directed acyclic graph)
 struct sf_graph
 {
-    struct sf_allocator *alloc;     // memory allocator for graph nodes
+    struct sf_allocator *alloc;     // memory allocator for all nodes and constant data
     struct sf_list *outputs;        // list of output nodes
     struct sf_list *nodes;          // list of all graph nodes
 };
@@ -179,11 +181,15 @@ const char *sf_get_op_name(struct sf_node *node);
 size_t sf_tensor_size(struct sf_tensor_desc desc);
 
 
+// clone an existing node into the graph
+struct sf_node *sf_clone_node(struct sf_graph *graph, struct sf_node *node,
+                              struct sf_node **new_args);
+
 // create a new input node
 struct sf_node *sf_create_input_node(struct sf_graph *graph, const char *name, struct sf_tensor_desc desc);
 
 // create a new constant node
-struct sf_node *sf_create_const_node(struct sf_graph *graph, struct sf_tensor_desc desc, void *data);
+struct sf_node *sf_create_const_node(struct sf_graph *graph, struct sf_tensor_desc desc, void *shared_data);
 
 // create a new add node
 struct sf_node *sf_create_add_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *y);

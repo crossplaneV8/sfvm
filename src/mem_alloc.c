@@ -21,7 +21,7 @@ struct sf_allocator
 };
 
 
-// size <= (MIN_SIZE << rank)
+// (MIN_SIZE << rank) >= size
 static int _get_rank(size_t size)
 {
     size_t space = MIN_SIZE;

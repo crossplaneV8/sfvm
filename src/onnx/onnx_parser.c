@@ -79,6 +79,20 @@ static void _get_tensor_info(Onnx__TensorProto *init, struct sf_tensor_desc *des
 }
 
 
+static struct sf_node *_tensor_to_const_node(struct sf_graph *graph, Onnx__TensorProto *tens)
+{
+    struct sf_tensor_desc desc = {SF_UNKNOWN};
+    void *data = NULL;
+    _get_tensor_info(tens, &desc, &data);
+
+    size_t size = sf_tensor_size(desc);
+    void *shared_buf = sf_malloc(graph->alloc, size);
+    memcpy(shared_buf, data, size);
+
+    return sf_create_const_node(graph, desc, shared_buf);
+}
+
+
 static void _convert_conv(struct sf_graph *dst, Onnx__GraphProto *src,
                           Onnx__NodeProto *node, struct sf_node **args)
 {
@@ -344,9 +358,9 @@ static void _convert_squeeze(struct sf_graph *dst, Onnx__GraphProto *src,
     }
     if (node->n_input == 2) {
         if (args[1]->op_type == OP_CONST) {
-            const struct sf_tensor_desc desc = args[1]->o_desc;
+            const struct sf_tensor_desc desc = args[1]->const_attrs.data_desc;
             assert(desc.dtype == SF_INT64 && desc.num_dims == 1);
-            const int64_t *data = args[1]->const_attrs.data;
+            const int64_t *data = args[1]->const_attrs.shared_data;
             num = desc.shape[0];
             for (int i=0; i<num; i++) {
                 axes[i] = (int)(data[i]);
@@ -379,9 +393,9 @@ static void _convert_reshape(struct sf_graph *dst, Onnx__GraphProto *src,
     }
     if (node->n_input == 2) {
         if (args[1]->op_type == OP_CONST) {
-            const struct sf_tensor_desc desc = args[1]->o_desc;
+            const struct sf_tensor_desc desc = args[1]->const_attrs.data_desc;
             assert(desc.dtype == SF_INT64 && desc.num_dims == 1);
-            const int64_t *data = args[1]->const_attrs.data;
+            const int64_t *data = args[1]->const_attrs.shared_data;
             num = desc.shape[0];
             for (int i=0; i<num; i++) {
                 shape[i] = (int)(data[i]);
@@ -442,9 +456,9 @@ static void _convert_reduce(struct sf_graph *dst, Onnx__GraphProto *src,
     }
     if (node->n_input == 2) {
         if (args[1]->op_type == OP_CONST) {
-            const struct sf_tensor_desc desc = args[1]->o_desc;
+            const struct sf_tensor_desc desc = args[1]->const_attrs.data_desc;
             assert(desc.dtype == SF_INT64 && desc.num_dims == 1);
-            const int64_t *data = args[1]->const_attrs.data;
+            const int64_t *data = args[1]->const_attrs.shared_data;
             num_axes = desc.shape[0];
             for (int i=0; i<num_axes; i++) {
                 axes[i] = (int)(data[i]);
@@ -462,21 +476,14 @@ static void _convert_constant(struct sf_graph *dst, Onnx__GraphProto *src,
 {
     assert(node->n_output == 1);
 
-    struct sf_tensor_desc desc = {SF_UNKNOWN};
-    void *data = NULL;
-
     for (int i=0; i<node->n_attribute; i++) {
         Onnx__AttributeProto *attr = node->attribute[i];
         if (strcmp(attr->name, "value") == 0) {
             if (attr->t != NULL) {
-                _get_tensor_info(attr->t, &desc, &data);
+                _tensor_to_const_node(dst, attr->t); return;
             }
         }
     }
-    size_t size = sf_tensor_size(desc);
-    void *buf = sf_malloc(dst->alloc, size);
-    memcpy(buf, data, size);
-    sf_create_const_node(dst, desc, buf);
 }
 
 
@@ -595,13 +602,7 @@ struct sf_graph *sf_load_graph_from_onnx(const char *path)
 
         // convert weights
         for (int i=0; i<src->n_initializer; i++) {
-            struct sf_tensor_desc desc = {SF_UNKNOWN};
-            void *data = NULL;
-            _get_tensor_info(src->initializer[i], &desc, &data);
-            size_t size = sf_tensor_size(desc);
-            void *buf = sf_malloc(dst->alloc, size);
-            memcpy(buf, data, size);
-            sf_create_const_node(dst, desc, buf);
+            _tensor_to_const_node(dst, src->initializer[i]);
             sf_list_append(names, src->initializer[i]->name);
         }
 

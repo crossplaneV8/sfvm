@@ -126,6 +126,7 @@ void sf_clear_dict(struct sf_dict *dict)
 }
 
 
+// create a new row with required length
 static struct _hash_row *_create_hash_row(int len)
 {
     struct _hash_row *row = malloc(sizeof(struct _hash_row) +
@@ -136,6 +137,7 @@ static struct _hash_row *_create_hash_row(int len)
 }
 
 
+// return a clone of the row with doubled length
 static struct _hash_row *_extend_hash_row(struct _hash_row *old)
 {
     struct _hash_row *row = _create_hash_row(2 * old->len);
@@ -145,6 +147,7 @@ static struct _hash_row *_extend_hash_row(struct _hash_row *old)
 }
 
 
+// double the hash size
 static void _extend_dict(struct sf_dict *dict)
 {
     int old_size = 1 << dict->hash_bits++;
@@ -212,7 +215,5 @@ void *sf_read_dict(struct sf_dict *dict, void *key)
     }
     return NULL;
 }
-
-
 
 
