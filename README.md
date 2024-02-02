@@ -12,3 +12,11 @@ SFVM是一个纯C代码实现的轻量且高效的AI编译器，试图解决当�
 中间表示(DAG)已经设计完成，图变换pass机制已实现，测试改进中。   
 后端代码生成计划支持CPU和GPU两套VM，待开发。（预计需要半年时间）   
 
+# 运行demo
+```bash
+cd sfvm
+gcc -O2 -Isrc -Isrc/onnx src/*.c src/onnx/*.c demo.c -o demo -s
+./demo
+```
+也可用CodeBlocks IDE打开工程文件sfvm.cbp编译运行
+

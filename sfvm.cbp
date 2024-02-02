@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="sfvm" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Release">
+				<Option output="sfvm" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option use_console_runner="0" />
+				<Compiler>
+					<Add option="-O2" />
+					<Add option="-Wno-unknown-pragmas" />
+					<Add directory="src/onnx" />
+					<Add directory="src" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+		</Compiler>
+		<Unit filename="demo.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/base_struct.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/base_struct.h" />
+		<Unit filename="src/graph.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/graph.h" />
+		<Unit filename="src/mem_alloc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/mem_alloc.h" />
+		<Unit filename="src/mutator.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/mutator.h" />
+		<Unit filename="src/node.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/node.h" />
+		<Unit filename="src/onnx/onnx.pb-c.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/onnx/onnx.pb-c.h" />
+		<Unit filename="src/onnx/onnx_parser.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/onnx/protobuf-c.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/onnx/protobuf-c.h" />
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>
