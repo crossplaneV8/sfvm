@@ -28,8 +28,8 @@ struct sf_graph *sf_load_graph_from_onnx(const char *path);
 void sf_set_in_desc(struct sf_graph *graph, const char *name, struct sf_tensor_desc desc);
 
 
-// infer tensor descriptor of a node recursively
-void sf_infer_tensor_desc_dfs(struct sf_node *node);
+// infer data type and shape of a node
+void sf_infer_tensor_desc(struct sf_node *node);
 
 
 // infer data type and shape of all nodes in the graph
@@ -38,6 +38,10 @@ void sf_graph_infer_tensor_desc(struct sf_graph *graph);
 
 // print graph to file in SSA format
 void sf_print_graph(FILE *f, struct sf_graph *graph, int with_desc, int with_attrs);
+
+
+// print node to file
+void sf_print_node(FILE *f, struct sf_graph *graph, struct sf_node *node);
 
 
 

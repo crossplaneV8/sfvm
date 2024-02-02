@@ -104,7 +104,7 @@ struct sf_node
             int pad_h0, pad_h1, pad_w0, pad_w1;
             int stride_h, stride_w;
             int dilate_h, dilate_w;
-            int has_bias, has_relu;
+            int has_relu;
         } conv_attrs;
 
         struct {    // pooling node
@@ -171,11 +171,24 @@ struct sf_graph
 };
 
 
+// find index of the axis in the layout
+static inline int find_axis(const char *layout, char axis)
+{
+    for (int i=0; i<SF_MAX_DIMS && layout[i]; i++) {
+        if (layout[i] == axis) {return i;}
+    }
+    return -1;
+}
+
+
 // get string name of data type
 const char *sf_get_dtype_name(enum sf_data_type dtype);
 
 // get string name of node op type
 const char *sf_get_op_name(struct sf_node *node);
+
+// calculate number of tensor elements
+size_t sf_tensor_prod(struct sf_tensor_desc desc);
 
 // calculate tensor size (in bytes)
 size_t sf_tensor_size(struct sf_tensor_desc desc);
@@ -206,8 +219,8 @@ struct sf_node *sf_create_div_node(struct sf_graph *graph, struct sf_node *x, st
 // create a new convolution node
 struct sf_node *sf_create_conv_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *w,
                                     struct sf_node *b, const char *x_layout, const char *w_layout,
-                                    int has_relu, int pad_h0, int pad_h1, int pad_w0, int pad_w1,
-                                    int stride_h, int stride_w, int dilate_h, int dilate_w);
+                                    int pad_h0, int pad_h1, int pad_w0, int pad_w1, int stride_h,
+                                    int stride_w, int dilate_h, int dilate_w, int has_relu);
 
 // create a new pooling node
 struct sf_node *sf_create_pool_node(struct sf_graph *graph, struct sf_node *x,
@@ -259,6 +272,10 @@ struct sf_node *sf_create_reshape_node(struct sf_graph *graph, struct sf_node *x
 // create a new transpose node
 struct sf_node *sf_create_transpose_node(struct sf_graph *graph, struct sf_node *x,
                                          int num_dims, const int *axes);
+
+// create a new layout transpose node
+struct sf_node *sf_create_layout_trans_node(struct sf_graph *graph, struct sf_node *x,
+                                            const char *src_layout, const char *dst_layout);
 
 // create a new reduce op node
 struct sf_node *sf_create_reduce_node(struct sf_graph *graph, struct sf_node *x, int num_axes,

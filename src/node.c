@@ -59,6 +59,17 @@ const char *sf_get_op_name(struct sf_node *node)
 }
 
 
+// calculate number of tensor elements
+size_t sf_tensor_prod(struct sf_tensor_desc desc)
+{
+    size_t size = 1;
+    for (int i=0; i<desc.num_dims; i++) {
+        size *= (size_t)desc.shape[i];
+    }
+    return size;
+}
+
+
 // calculate tensor size (in bytes)
 size_t sf_tensor_size(struct sf_tensor_desc desc)
 {
@@ -73,10 +84,7 @@ size_t sf_tensor_size(struct sf_tensor_desc desc)
         case SF_INT32:      size = 4; break;
         case SF_INT64:      size = 8; break;
     }
-    for (int i=0; i<desc.num_dims; i++) {
-        size *= (size_t)desc.shape[i];
-    }
-    return size;
+    return sf_tensor_prod(desc) * size;
 }
 
 
@@ -183,8 +191,8 @@ struct sf_node *sf_create_div_node(struct sf_graph *graph, struct sf_node *x, st
 // create a new convolution node
 struct sf_node *sf_create_conv_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *w,
                                     struct sf_node *b, const char *x_layout, const char *w_layout,
-                                    int has_relu, int pad_h0, int pad_h1, int pad_w0, int pad_w1,
-                                    int stride_h, int stride_w, int dilate_h, int dilate_w)
+                                    int pad_h0, int pad_h1, int pad_w0, int pad_w1, int stride_h,
+                                    int stride_w, int dilate_h, int dilate_w, int has_relu)
 {
     struct sf_node *node = _sf_create_node(graph);
     node->op_type = OP_CONV;
@@ -192,7 +200,6 @@ struct sf_node *sf_create_conv_node(struct sf_graph *graph, struct sf_node *x, s
     node->args[node->num_args++] = w;
     if (b != NULL) {
         node->args[node->num_args++] = b;
-        node->conv_attrs.has_bias = 1;
     }
     strcpy(node->conv_attrs.x_layout, x_layout);
     strcpy(node->conv_attrs.w_layout, w_layout);
@@ -388,6 +395,24 @@ struct sf_node *sf_create_transpose_node(struct sf_graph *graph, struct sf_node 
         node->transpose_attrs.axes[i] = axes[i];
     }
     return node;
+}
+
+
+// create a new layout transpose node
+struct sf_node *sf_create_layout_trans_node(struct sf_graph *graph, struct sf_node *x,
+                                            const char *src_layout, const char *dst_layout)
+{
+    const int num = strlen(src_layout);
+    int axes[SF_MAX_DIMS] = {0};
+
+    for (int i=0; i<num; i++) {
+        for (int j=0; j<num; j++) {
+            if (src_layout[j] == dst_layout[i]) {
+                axes[i] = j; break;
+            }
+        }
+    }
+    return sf_create_transpose_node(graph, x, num, axes);
 }
 
 

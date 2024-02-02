@@ -68,15 +68,6 @@ static void _infer_broadcast_op(struct sf_node *node)
 }
 
 
-static int _axis_idx(const char *layout, char axis)
-{
-    for (int i=0; i<SF_MAX_DIMS; i++) {
-        if (layout[i] == axis) return i;
-    }
-    return -1;
-}
-
-
 static void _infer_conv(struct sf_node *node)
 {
     struct sf_tensor_desc x_desc = node->args[0]->o_desc;
@@ -95,13 +86,13 @@ static void _infer_conv(struct sf_node *node)
     int dilate_h = node->conv_attrs.dilate_h;
     int dilate_w = node->conv_attrs.dilate_w;
 
-    int _n = _axis_idx(x_layout, 'N');
-    int _c = _axis_idx(x_layout, 'C');
-    int _h = _axis_idx(x_layout, 'H');
-    int _w = _axis_idx(x_layout, 'W');
+    int _n = find_axis(x_layout, 'N');
+    int _c = find_axis(x_layout, 'C');
+    int _h = find_axis(x_layout, 'H');
+    int _w = find_axis(x_layout, 'W');
 
-    int kernel_h = w_desc.shape[_axis_idx(w_layout, 'H')];
-    int kernel_w = w_desc.shape[_axis_idx(w_layout, 'W')];
+    int kernel_h = w_desc.shape[find_axis(w_layout, 'H')];
+    int kernel_w = w_desc.shape[find_axis(w_layout, 'W')];
     int in_h = pad_h0 + x_desc.shape[_h] + pad_h1;
     int in_w = pad_w0 + x_desc.shape[_w] + pad_w1;
     kernel_h = (kernel_h - 1) * dilate_h + 1;
@@ -110,7 +101,7 @@ static void _infer_conv(struct sf_node *node)
     node->o_desc.dtype = x_desc.dtype;
     node->o_desc.num_dims = 4;
     node->o_desc.shape[_n] = x_desc.shape[_n];
-    node->o_desc.shape[_c] = w_desc.shape[_axis_idx(w_layout, 'O')];
+    node->o_desc.shape[_c] = w_desc.shape[find_axis(w_layout, 'O')];
     node->o_desc.shape[_h] = (in_h - kernel_h) / stride_h + 1;
     node->o_desc.shape[_w] = (in_w - kernel_w) / stride_w + 1;
 }
@@ -129,8 +120,8 @@ static void _infer_pool(struct sf_node *node)
     int kernel_h = node->pool_attrs.kernel_h;
     int kernel_w = node->pool_attrs.kernel_w;
 
-    int _h = _axis_idx(layout, 'H');
-    int _w = _axis_idx(layout, 'W');
+    int _h = find_axis(layout, 'H');
+    int _w = find_axis(layout, 'W');
 
     int in_h = pad_h0 + desc.shape[_h] + pad_h1;
     int in_w = pad_w0 + desc.shape[_w] + pad_w1;
@@ -145,8 +136,8 @@ static void _infer_global_pool(struct sf_node *node)
 {
     struct sf_tensor_desc desc = node->args[0]->o_desc;
     const char *layout = node->pool_attrs.layout;
-    desc.shape[_axis_idx(layout, 'H')] = 1;
-    desc.shape[_axis_idx(layout, 'W')] = 1;
+    desc.shape[find_axis(layout, 'H')] = 1;
+    desc.shape[find_axis(layout, 'W')] = 1;
     node->o_desc = desc;
 }
 
@@ -298,10 +289,12 @@ static void _infer_gemm(struct sf_node *node)
 
 
 // infer data type and shape of a node
-static void _infer_tensor_desc(struct sf_node *node)
+void sf_infer_tensor_desc(struct sf_node *node)
 {
     for (int i=0; i<node->num_args; i++) {
-        if (node->args[i]->o_desc.dtype == SF_UNKNOWN) return;
+        if (node->args[i]->o_desc.dtype == SF_UNKNOWN) {
+            sf_infer_tensor_desc(node->args[i]);
+        }
     }
     switch (node->op_type) {
         case OP_UNKNOWN:    break;
@@ -336,31 +329,7 @@ static void _infer_tensor_desc(struct sf_node *node)
         case OP_CAST:       _infer_cast(node); break;
         case OP_GEMM:       _infer_gemm(node); break;
     }
-}
-
-
-// infer tensor descriptor recursively with a memo map
-static void _infer_tensor_desc_dfs(struct sf_node *node, struct sf_dict *memo)
-{
-    if (sf_read_dict(memo, node) == NULL) {
-        for (int i=0; i<node->num_args; i++) {
-            struct sf_node *arg = node->args[i];
-            if (arg->o_desc.dtype == SF_UNKNOWN) {
-                _infer_tensor_desc_dfs(arg, memo);
-            }
-        }
-        _infer_tensor_desc(node);
-        sf_write_dict(memo, node, node);
-    }
-}
-
-
-// infer tensor descriptor of a node recursively
-void sf_infer_tensor_desc_dfs(struct sf_node *node)
-{
-    struct sf_dict *memo = sf_create_dict();
-    _infer_tensor_desc_dfs(node, memo);
-    sf_discard_dict(memo);
+    assert(node->o_desc.dtype != SF_UNKNOWN);
 }
 
 
@@ -368,7 +337,7 @@ void sf_infer_tensor_desc_dfs(struct sf_node *node)
 void sf_graph_infer_tensor_desc(struct sf_graph *graph)
 {
     for (int i=0; i<graph->nodes->cnt; i++) {
-        _infer_tensor_desc(graph->nodes->buf[i]);
+        sf_infer_tensor_desc(graph->nodes->buf[i]);
     }
 }
 
@@ -507,5 +476,22 @@ void sf_print_graph(FILE *f, struct sf_graph *graph, int with_desc, int with_att
     fprintf(f, ")\n");
 }
 
+
+// print node to file
+void sf_print_node(FILE *f, struct sf_graph *graph, struct sf_node *node)
+{
+    fprintf(f, "%s", sf_get_dtype_name(node->o_desc.dtype));
+    _print_vec_i32(f, node->o_desc.num_dims, node->o_desc.shape);
+    int idx = sf_list_find(graph->nodes, node);
+    fprintf(f, " %%%d = %s(", idx, sf_get_op_name(node));
+
+    for (int i=0; i<node->num_args; i++) {
+        int k = sf_list_find(graph->nodes, node->args[i]);
+        fprintf(f, i ? ", %%%d" : "%%%d" , k);
+    }
+    fprintf(f, ") {");
+    _print_node_attr(f, node);
+    fprintf(f, "}\n");
+}
 
 

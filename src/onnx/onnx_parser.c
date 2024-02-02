@@ -103,7 +103,6 @@ static void _convert_conv(struct sf_graph *dst, Onnx__GraphProto *src,
     int pad_h0 = 0, pad_h1 = 0, pad_w0 = 0, pad_w1 = 0;
     int stride_h = 0, stride_w = 0;
     int dilate_h = 0, dilate_w = 0;
-    int has_relu = 0;
 
     for (int i=0; i<node->n_attribute; i++) {
         Onnx__AttributeProto *attr = node->attribute[i];
@@ -131,9 +130,8 @@ static void _convert_conv(struct sf_graph *dst, Onnx__GraphProto *src,
             dilate_w = attr->ints[1];
         }
     }
-    sf_create_conv_node(dst, args[0], args[1], bias, "NCHW", "OIHW",
-                        has_relu, pad_h0, pad_h1, pad_w0, pad_w1,
-                        stride_h, stride_w, dilate_h, dilate_w);
+    sf_create_conv_node(dst, args[0], args[1], bias, "NCHW", "OIHW", pad_h0, pad_h1,
+                        pad_w0, pad_w1, stride_h, stride_w, dilate_h, dilate_w, 0);
 }
 
 
