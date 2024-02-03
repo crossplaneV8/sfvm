@@ -89,33 +89,31 @@ size_t sf_tensor_size(struct sf_tensor_desc desc)
 
 
 // create a new node
-static struct sf_node *_sf_create_node(struct sf_graph *graph)
+struct sf_node *sf_create_node(struct sf_graph *graph, enum sf_op_type type, void *attrs)
 {
     struct sf_node *node = sf_malloc(graph->alloc, sizeof(struct sf_node));
     memset(node, 0, sizeof(struct sf_node));
+
+    node->op_type = type;
+    if (attrs != NULL) {
+        sf_shared_memory_inc(attrs);
+        node->attrs = attrs;
+    }
     sf_list_append(graph->nodes, node);
     return node;
 }
 
 
 // clone an existing node into the graph
-struct sf_node *sf_clone_node(struct sf_graph *graph, struct sf_node *node,
-                              struct sf_node **new_args)
+struct sf_node *sf_clone_node(struct sf_graph *graph, struct sf_node *node, struct sf_node **new_args)
 {
-    struct sf_node *new_node = _sf_create_node(graph);
-    memcpy(new_node, node, sizeof(struct sf_node));
-    new_node->o_desc = (struct sf_tensor_desc){SF_UNKNOWN};
+    struct sf_node *new_node = sf_create_node(graph, node->op_type, node->attrs);
 
     if (new_args != NULL) {
+        new_node->num_args = node->num_args;
         for (int i=0; i<node->num_args; i++) {
             new_node->args[i] = new_args[i];
         }
-        new_node->num_args = node->num_args;
-    } else {
-        new_node->num_args = 0;
-    }
-    if (node->op_type == OP_CONST) {
-        sf_shared_memory_inc(node->const_attrs.shared_data);
     }
     return new_node;
 }
@@ -124,31 +122,31 @@ struct sf_node *sf_clone_node(struct sf_graph *graph, struct sf_node *node,
 // create a new input node
 struct sf_node *sf_create_input_node(struct sf_graph *graph, const char *name, struct sf_tensor_desc desc)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_INPUT;
-    strcpy(node->input_attrs.name, name);
-    node->input_attrs.data_desc = desc;
-    return node;
+    assert(strlen(name) < SF_MAX_STR_LEN);
+    struct sf_input_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_input_attrs));
+    strcpy(attrs->name, name);
+    attrs->data_desc = desc;
+    return sf_create_node(graph, OP_INPUT, attrs);
 }
 
 
 // create a new constant node
-struct sf_node *sf_create_const_node(struct sf_graph *graph, struct sf_tensor_desc desc, void *shared_data)
+struct sf_node *sf_create_const_node(struct sf_graph *graph, struct sf_tensor_desc desc, const void *data)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_CONST;
-    node->const_attrs.shared_data = shared_data;
-    node->const_attrs.data_desc = desc;
-    sf_shared_memory_inc(shared_data);
-    return node;
+    const size_t data_size = sf_tensor_size(desc);
+    struct sf_const_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_const_attrs) + data_size);
+    attrs->data_desc = desc;
+    if (data != NULL) {
+        memcpy(attrs->data, data, data_size);
+    }
+    return sf_create_node(graph, OP_CONST, attrs);
 }
 
 
 // create a new add node
 struct sf_node *sf_create_add_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *y)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_ADD;
+    struct sf_node *node = sf_create_node(graph, OP_ADD, NULL);
     node->args[node->num_args++] = x;
     node->args[node->num_args++] = y;
     return node;
@@ -158,8 +156,7 @@ struct sf_node *sf_create_add_node(struct sf_graph *graph, struct sf_node *x, st
 // create a new subtract node
 struct sf_node *sf_create_sub_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *y)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_SUB;
+    struct sf_node *node = sf_create_node(graph, OP_SUB, NULL);
     node->args[node->num_args++] = x;
     node->args[node->num_args++] = y;
     return node;
@@ -169,8 +166,7 @@ struct sf_node *sf_create_sub_node(struct sf_graph *graph, struct sf_node *x, st
 // create a new multiply node
 struct sf_node *sf_create_mul_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *y)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_MUL;
+    struct sf_node *node = sf_create_node(graph, OP_MUL, NULL);
     node->args[node->num_args++] = x;
     node->args[node->num_args++] = y;
     return node;
@@ -180,8 +176,7 @@ struct sf_node *sf_create_mul_node(struct sf_graph *graph, struct sf_node *x, st
 // create a new divide node
 struct sf_node *sf_create_div_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *y)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_DIV;
+    struct sf_node *node = sf_create_node(graph, OP_DIV, NULL);
     node->args[node->num_args++] = x;
     node->args[node->num_args++] = y;
     return node;
@@ -194,24 +189,25 @@ struct sf_node *sf_create_conv_node(struct sf_graph *graph, struct sf_node *x, s
                                     int pad_h0, int pad_h1, int pad_w0, int pad_w1, int stride_h,
                                     int stride_w, int dilate_h, int dilate_w, int has_relu)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_CONV;
+    struct sf_conv_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_conv_attrs));
+    strcpy(attrs->x_layout, x_layout);
+    strcpy(attrs->w_layout, w_layout);
+    attrs->pad_h0 = pad_h0;
+    attrs->pad_h1 = pad_h1;
+    attrs->pad_w0 = pad_w0;
+    attrs->pad_w1 = pad_w1;
+    attrs->stride_h = stride_h;
+    attrs->stride_w = stride_w;
+    attrs->dilate_h = dilate_h;
+    attrs->dilate_w = dilate_w;
+    attrs->has_relu = has_relu;
+
+    struct sf_node *node = sf_create_node(graph, OP_CONV, attrs);
     node->args[node->num_args++] = x;
     node->args[node->num_args++] = w;
     if (b != NULL) {
         node->args[node->num_args++] = b;
     }
-    strcpy(node->conv_attrs.x_layout, x_layout);
-    strcpy(node->conv_attrs.w_layout, w_layout);
-    node->conv_attrs.has_relu = has_relu;
-    node->conv_attrs.pad_h0 = pad_h0;
-    node->conv_attrs.pad_h1 = pad_h1;
-    node->conv_attrs.pad_w0 = pad_w0;
-    node->conv_attrs.pad_w1 = pad_w1;
-    node->conv_attrs.stride_h = stride_h;
-    node->conv_attrs.stride_w = stride_w;
-    node->conv_attrs.dilate_h = dilate_h;
-    node->conv_attrs.dilate_w = dilate_w;
     return node;
 }
 
@@ -222,18 +218,19 @@ struct sf_node *sf_create_pool_node(struct sf_graph *graph, struct sf_node *x,
                                     int stride_h, int stride_w, int kernel_h, int kernel_w,
                                     enum sf_op_type pool_type, const char *layout)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = pool_type;
+    struct sf_pool_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_pool_attrs));
+    attrs->pad_h0 = pad_h0;
+    attrs->pad_h1 = pad_h1;
+    attrs->pad_w0 = pad_w0;
+    attrs->pad_w1 = pad_w1;
+    attrs->stride_h = stride_h;
+    attrs->stride_w = stride_w;
+    attrs->kernel_h = kernel_h;
+    attrs->kernel_w = kernel_w;
+    strcpy(attrs->layout, layout);
+
+    struct sf_node *node = sf_create_node(graph, pool_type, attrs);
     node->args[node->num_args++] = x;
-    node->pool_attrs.pad_h0 = pad_h0;
-    node->pool_attrs.pad_h1 = pad_h1;
-    node->pool_attrs.pad_w0 = pad_w0;
-    node->pool_attrs.pad_w1 = pad_w1;
-    node->pool_attrs.stride_h = stride_h;
-    node->pool_attrs.stride_w = stride_w;
-    node->pool_attrs.kernel_h = kernel_h;
-    node->pool_attrs.kernel_w = kernel_w;
-    strcpy(node->pool_attrs.layout, layout);
     return node;
 }
 
@@ -242,10 +239,12 @@ struct sf_node *sf_create_pool_node(struct sf_graph *graph, struct sf_node *x,
 struct sf_node *sf_create_global_pool_node(struct sf_graph *graph, struct sf_node *x,
                                            enum sf_op_type pool_type, const char *layout)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = pool_type;
+    struct sf_pool_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_pool_attrs));
+    memset(attrs, 0, sizeof(struct sf_pool_attrs));
+    strcpy(attrs->layout, layout);
+
+    struct sf_node *node = sf_create_node(graph, pool_type, attrs);
     node->args[node->num_args++] = x;
-    strcpy(node->pool_attrs.layout, layout);
     return node;
 }
 
@@ -256,15 +255,16 @@ struct sf_node *sf_create_batchnorm_node(struct sf_graph *graph, struct sf_node 
                                          struct sf_node *mean, struct sf_node *var,
                                          double epsilon, const char *layout)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_BATCHNORM;
+    struct sf_bn_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_bn_attrs));
+    attrs->epsilon = epsilon;
+    strcpy(attrs->layout, layout);
+
+    struct sf_node *node = sf_create_node(graph, OP_BATCHNORM, attrs);
     node->args[node->num_args++] = data;
     node->args[node->num_args++] = scale;
     node->args[node->num_args++] = bias;
     node->args[node->num_args++] = mean;
     node->args[node->num_args++] = var;
-    node->bn_attrs.epsilon = epsilon;
-    strcpy(node->bn_attrs.layout, layout);
     return node;
 }
 
@@ -272,8 +272,7 @@ struct sf_node *sf_create_batchnorm_node(struct sf_graph *graph, struct sf_node 
 // create a new identity node
 struct sf_node *sf_create_identity_node(struct sf_graph *graph, struct sf_node *x)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_IDENTITY;
+    struct sf_node *node = sf_create_node(graph, OP_IDENTITY, NULL);
     node->args[node->num_args++] = x;
     return node;
 }
@@ -282,8 +281,7 @@ struct sf_node *sf_create_identity_node(struct sf_graph *graph, struct sf_node *
 // create a new ReLU node
 struct sf_node *sf_create_relu_node(struct sf_graph *graph, struct sf_node *x)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_RELU;
+    struct sf_node *node = sf_create_node(graph, OP_RELU, NULL);
     node->args[node->num_args++] = x;
     return node;
 }
@@ -292,8 +290,7 @@ struct sf_node *sf_create_relu_node(struct sf_graph *graph, struct sf_node *x)
 // create a new sigmoid node
 struct sf_node *sf_create_sigmoid_node(struct sf_graph *graph, struct sf_node *x)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_SIGMOID;
+    struct sf_node *node = sf_create_node(graph, OP_SIGMOID, NULL);
     node->args[node->num_args++] = x;
     return node;
 }
@@ -302,10 +299,11 @@ struct sf_node *sf_create_sigmoid_node(struct sf_graph *graph, struct sf_node *x
 // create a new softmax node
 struct sf_node *sf_create_softmax_node(struct sf_graph *graph, struct sf_node *x, int axis)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_SOFTMAX;
+    struct sf_axis_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_axis_attrs));
+    attrs->axis = axis;
+
+    struct sf_node *node = sf_create_node(graph, OP_SOFTMAX, attrs);
     node->args[node->num_args++] = x;
-    node->axis_attrs.axis = axis;
     return node;
 }
 
@@ -314,14 +312,15 @@ struct sf_node *sf_create_softmax_node(struct sf_graph *graph, struct sf_node *x
 struct sf_node *sf_create_slice_node(struct sf_graph *graph, struct sf_node *x,
                                      int num_dims, const int *start, const int *shape)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_SLICE;
-    node->args[node->num_args++] = x;
-    node->slice_attrs.num_dims = num_dims;
+    struct sf_slice_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_slice_attrs));
+    attrs->num_dims = num_dims;
     for (int i=0; i<num_dims; i++) {
-        node->slice_attrs.start[i] = start[i];
-        node->slice_attrs.shape[i] = shape[i];
+        attrs->start[i] = start[i];
+        attrs->shape[i] = shape[i];
     }
+
+    struct sf_node *node = sf_create_node(graph, OP_SLICE, attrs);
+    node->args[node->num_args++] = x;
     return node;
 }
 
@@ -330,14 +329,15 @@ struct sf_node *sf_create_slice_node(struct sf_graph *graph, struct sf_node *x,
 struct sf_node *sf_create_concat_node(struct sf_graph *graph, int axis,
                                       int num_args, struct sf_node **args)
 {
+    struct sf_axis_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_axis_attrs));
+    attrs->axis = axis;
+
+    struct sf_node *node = sf_create_node(graph, OP_CONCAT, attrs);
     assert(num_args <= SF_MAX_ARGS);
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_CONCAT;
     node->num_args = num_args;
     for (int i=0; i<num_args; i++) {
         node->args[i] = args[i];
     }
-    node->axis_attrs.axis = axis;
     return node;
 }
 
@@ -345,10 +345,11 @@ struct sf_node *sf_create_concat_node(struct sf_graph *graph, int axis,
 // create a new flatten node
 struct sf_node *sf_create_flatten_node(struct sf_graph *graph, struct sf_node *x, int axis)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_FLATTEN;
+    struct sf_axis_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_axis_attrs));
+    attrs->axis = axis;
+
+    struct sf_node *node = sf_create_node(graph, OP_FLATTEN, attrs);
     node->args[node->num_args++] = x;
-    node->axis_attrs.axis = axis;
     return node;
 }
 
@@ -357,13 +358,14 @@ struct sf_node *sf_create_flatten_node(struct sf_graph *graph, struct sf_node *x
 struct sf_node *sf_create_squeeze_node(struct sf_graph *graph, struct sf_node *x,
                                        int num_axes, const int *axes)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_SQUEEZE;
-    node->args[node->num_args++] = x;
-    node->squeeze_attrs.num_axes = num_axes;
+    struct sf_squeeze_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_squeeze_attrs));
+    attrs->num_axes = num_axes;
     for (int i=0; i<num_axes; i++) {
-        node->squeeze_attrs.axes[i] = axes[i];
+        attrs->axes[i] = axes[i];
     }
+
+    struct sf_node *node = sf_create_node(graph, OP_SQUEEZE, attrs);
+    node->args[node->num_args++] = x;
     return node;
 }
 
@@ -372,13 +374,14 @@ struct sf_node *sf_create_squeeze_node(struct sf_graph *graph, struct sf_node *x
 struct sf_node *sf_create_reshape_node(struct sf_graph *graph, struct sf_node *x,
                                        int num_dims, const int *new_shape)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_RESHAPE;
-    node->args[node->num_args++] = x;
-    node->reshape_attrs.num_dims = num_dims;
+    struct sf_reshape_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_reshape_attrs));
+    attrs->num_dims = num_dims;
     for (int i=0; i<num_dims; i++) {
-        node->reshape_attrs.shape[i] = new_shape[i];
+        attrs->shape[i] = new_shape[i];
     }
+
+    struct sf_node *node = sf_create_node(graph, OP_RESHAPE, attrs);
+    node->args[node->num_args++] = x;
     return node;
 }
 
@@ -387,13 +390,14 @@ struct sf_node *sf_create_reshape_node(struct sf_graph *graph, struct sf_node *x
 struct sf_node *sf_create_transpose_node(struct sf_graph *graph, struct sf_node *x,
                                          int num_dims, const int *axes)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_TRANSPOSE;
-    node->args[node->num_args++] = x;
-    node->transpose_attrs.num_dims = num_dims;
+    struct sf_transpose_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_transpose_attrs));
+    attrs->num_dims = num_dims;
     for (int i=0; i<num_dims; i++) {
-        node->transpose_attrs.axes[i] = axes[i];
+        attrs->axes[i] = axes[i];
     }
+
+    struct sf_node *node = sf_create_node(graph, OP_TRANSPOSE, attrs);
+    node->args[node->num_args++] = x;
     return node;
 }
 
@@ -420,14 +424,15 @@ struct sf_node *sf_create_layout_trans_node(struct sf_graph *graph, struct sf_no
 struct sf_node *sf_create_reduce_node(struct sf_graph *graph, struct sf_node *x, int num_axes,
                                       const int *axes, int keep_dims, enum sf_op_type type)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = type;
-    node->args[node->num_args++] = x;
-    node->reduce_attrs.num_axes = num_axes;
+    struct sf_reduce_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_reduce_attrs));
+    attrs->num_axes = num_axes;
     for (int i=0; i<num_axes; i++) {
-        node->reduce_attrs.axes[i] = axes[i];
+        attrs->axes[i] = axes[i];
     }
-    node->reduce_attrs.keep_dims = keep_dims;
+    attrs->keep_dims = keep_dims;
+
+    struct sf_node *node = sf_create_node(graph, type, attrs);
+    node->args[node->num_args++] = x;
     return node;
 }
 
@@ -435,10 +440,11 @@ struct sf_node *sf_create_reduce_node(struct sf_graph *graph, struct sf_node *x,
 // create a new cast node
 struct sf_node *sf_create_cast_node(struct sf_graph *graph, struct sf_node *x, enum sf_data_type dtype)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_CAST;
+    struct sf_cast_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_cast_attrs));
+    attrs->dtype = dtype;
+
+    struct sf_node *node = sf_create_node(graph, OP_CAST, attrs);
     node->args[node->num_args++] = x;
-    node->cast_attrs.dtype = dtype;
     return node;
 }
 
@@ -447,17 +453,18 @@ struct sf_node *sf_create_cast_node(struct sf_graph *graph, struct sf_node *x, e
 struct sf_node *sf_create_gemm_node(struct sf_graph *graph, struct sf_node *a, struct sf_node *b,
                                     struct sf_node *c, float alpha, float beta, int trans_a, int trans_b)
 {
-    struct sf_node *node = _sf_create_node(graph);
-    node->op_type = OP_GEMM;
+    struct sf_gemm_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_gemm_attrs));
+    attrs->alpha = alpha;
+    attrs->beta = beta;
+    attrs->trans_a = trans_a;
+    attrs->trans_b = trans_b;
+
+    struct sf_node *node = sf_create_node(graph, OP_GEMM, attrs);
     node->args[node->num_args++] = a;
     node->args[node->num_args++] = b;
     if (c != NULL) {
         node->args[node->num_args++] = c;
     }
-    node->gemm_attrs.alpha = alpha;
-    node->gemm_attrs.beta = beta;
-    node->gemm_attrs.trans_a = trans_a;
-    node->gemm_attrs.trans_b = trans_b;
     return node;
 }
 

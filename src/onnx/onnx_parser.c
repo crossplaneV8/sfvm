@@ -84,12 +84,7 @@ static struct sf_node *_tensor_to_const_node(struct sf_graph *graph, Onnx__Tenso
     struct sf_tensor_desc desc = {SF_UNKNOWN};
     void *data = NULL;
     _get_tensor_info(tens, &desc, &data);
-
-    size_t size = sf_tensor_size(desc);
-    void *shared_buf = sf_malloc(graph->alloc, size);
-    memcpy(shared_buf, data, size);
-
-    return sf_create_const_node(graph, desc, shared_buf);
+    return sf_create_const_node(graph, desc, data);
 }
 
 
@@ -356,9 +351,10 @@ static void _convert_squeeze(struct sf_graph *dst, Onnx__GraphProto *src,
     }
     if (node->n_input == 2) {
         if (args[1]->op_type == OP_CONST) {
-            const struct sf_tensor_desc desc = args[1]->const_attrs.data_desc;
+            struct sf_const_attrs *attrs = args[1]->attrs;
+            const struct sf_tensor_desc desc = attrs->data_desc;
             assert(desc.dtype == SF_INT64 && desc.num_dims == 1);
-            const int64_t *data = args[1]->const_attrs.shared_data;
+            const int64_t *data = (const int64_t*)(attrs->data);
             num = desc.shape[0];
             for (int i=0; i<num; i++) {
                 axes[i] = (int)(data[i]);
@@ -391,9 +387,10 @@ static void _convert_reshape(struct sf_graph *dst, Onnx__GraphProto *src,
     }
     if (node->n_input == 2) {
         if (args[1]->op_type == OP_CONST) {
-            const struct sf_tensor_desc desc = args[1]->const_attrs.data_desc;
+            struct sf_const_attrs *attrs = args[1]->attrs;
+            const struct sf_tensor_desc desc = attrs->data_desc;
             assert(desc.dtype == SF_INT64 && desc.num_dims == 1);
-            const int64_t *data = args[1]->const_attrs.shared_data;
+            const int64_t *data = (const int64_t*)(attrs->data);
             num = desc.shape[0];
             for (int i=0; i<num; i++) {
                 shape[i] = (int)(data[i]);
@@ -454,9 +451,10 @@ static void _convert_reduce(struct sf_graph *dst, Onnx__GraphProto *src,
     }
     if (node->n_input == 2) {
         if (args[1]->op_type == OP_CONST) {
-            const struct sf_tensor_desc desc = args[1]->const_attrs.data_desc;
+            struct sf_const_attrs *attrs = args[1]->attrs;
+            const struct sf_tensor_desc desc = attrs->data_desc;
             assert(desc.dtype == SF_INT64 && desc.num_dims == 1);
-            const int64_t *data = args[1]->const_attrs.shared_data;
+            const int64_t *data = (const int64_t*)(attrs->data);
             num_axes = desc.shape[0];
             for (int i=0; i<num_axes; i++) {
                 axes[i] = (int)(data[i]);

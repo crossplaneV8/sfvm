@@ -84,82 +84,96 @@ struct sf_node
     int num_args;                       // number of input arguments
     struct sf_node *args[SF_MAX_ARGS];  // list of input arguments
 
+    void *attrs;                        // immutable attributes
+
     struct sf_tensor_desc o_desc;       // descriptor of output tensor
-
-    union   // attributes
-    {
-        struct {    // input node
-            char name[SF_MAX_STR_LEN];
-            struct sf_tensor_desc data_desc;
-        } input_attrs;
-
-        struct {    // constant node
-            void *shared_data;  // memory shared between nodes with a ref-cnt
-            struct sf_tensor_desc data_desc;
-        } const_attrs;
-
-        struct {    // convolution node
-            char x_layout[SF_MAX_DIMS];
-            char w_layout[SF_MAX_DIMS];
-            int pad_h0, pad_h1, pad_w0, pad_w1;
-            int stride_h, stride_w;
-            int dilate_h, dilate_w;
-            int has_relu;
-        } conv_attrs;
-
-        struct {    // pooling node
-            int pad_h0, pad_h1, pad_w0, pad_w1;
-            int stride_h, stride_w;
-            int kernel_h, kernel_w;
-            char layout[SF_MAX_DIMS];
-        } pool_attrs;
-
-        struct {    // batch-norm node
-            double epsilon;
-            char layout[SF_MAX_DIMS];
-        } bn_attrs;
-
-        struct {    // softmax, concat, flatten
-            int axis;   // allows negative
-        } axis_attrs;
-
-        struct {    // slice node
-            int num_dims;
-            int start[SF_MAX_DIMS];
-            int shape[SF_MAX_DIMS];
-        } slice_attrs;
-
-        struct {    // squeeze node
-            int num_axes;
-            int axes[SF_MAX_DIMS];  // allows negative
-        } squeeze_attrs;
-
-        struct {    // reshape node
-            int num_dims;
-            int shape[SF_MAX_DIMS]; // allows -1
-        } reshape_attrs;
-
-        struct {    // transpose node
-            int num_dims;
-            int axes[SF_MAX_DIMS];
-        } transpose_attrs;
-
-        struct {    // reduce node
-            int num_axes;
-            int axes[SF_MAX_DIMS];  // allows negative
-            int keep_dims;
-        } reduce_attrs;
-
-        struct {    // cast node
-            enum sf_data_type dtype;
-        } cast_attrs;
-
-        struct {    // gemm node
-            float alpha, beta;
-            int trans_a, trans_b;
-        } gemm_attrs;
-    };
 };
+
+
+// input attributes
+struct sf_input_attrs {
+    struct sf_tensor_desc data_desc;
+    char name[SF_MAX_STR_LEN];
+};
+
+// constant attributes
+struct sf_const_attrs {
+    struct sf_tensor_desc data_desc;
+    uint64_t data[];
+};
+
+// convolution attributes
+struct sf_conv_attrs {
+    char x_layout[SF_MAX_DIMS];
+    char w_layout[SF_MAX_DIMS];
+    int pad_h0, pad_h1, pad_w0, pad_w1;
+    int stride_h, stride_w;
+    int dilate_h, dilate_w;
+    int has_relu;
+};
+
+// pooling attributes
+struct sf_pool_attrs {
+    int pad_h0, pad_h1, pad_w0, pad_w1;
+    int stride_h, stride_w;
+    int kernel_h, kernel_w;
+    char layout[SF_MAX_DIMS];
+};
+
+// batch-norm attributes
+struct sf_bn_attrs {
+    double epsilon;
+    char layout[SF_MAX_DIMS];
+};
+
+// softmax, concat, flatten attributes
+struct sf_axis_attrs {
+    int axis;   // allows negative
+};
+
+// slice attributes
+struct sf_slice_attrs {
+    int num_dims;
+    int start[SF_MAX_DIMS];
+    int shape[SF_MAX_DIMS];
+};
+
+// squeeze attributes
+struct sf_squeeze_attrs {
+    int num_axes;
+    int axes[SF_MAX_DIMS];  // allows negative
+};
+
+// reshape attributes
+struct sf_reshape_attrs {
+    int num_dims;
+    int shape[SF_MAX_DIMS]; // allows negative
+};
+
+// transpose attributes
+struct sf_transpose_attrs {
+    int num_dims;
+    int axes[SF_MAX_DIMS];
+};
+
+// reduce attributes
+struct sf_reduce_attrs {
+    int num_axes;
+    int axes[SF_MAX_DIMS];  // allows negative
+    int keep_dims;
+};
+
+// cast attributes
+struct sf_cast_attrs {
+    enum sf_data_type dtype;
+};
+
+// gemm attributes
+struct sf_gemm_attrs {
+    float alpha, beta;
+    int trans_a, trans_b;
+};
+
 
 
 // DAG (directed acyclic graph)
@@ -195,14 +209,16 @@ size_t sf_tensor_size(struct sf_tensor_desc desc);
 
 
 // clone an existing node into the graph
-struct sf_node *sf_clone_node(struct sf_graph *graph, struct sf_node *node,
-                              struct sf_node **new_args);
+struct sf_node *sf_clone_node(struct sf_graph *graph, struct sf_node *node, struct sf_node **new_args);
+
+// create a new node
+struct sf_node *sf_create_node(struct sf_graph *graph, enum sf_op_type type, void *attrs);
 
 // create a new input node
 struct sf_node *sf_create_input_node(struct sf_graph *graph, const char *name, struct sf_tensor_desc desc);
 
 // create a new constant node
-struct sf_node *sf_create_const_node(struct sf_graph *graph, struct sf_tensor_desc desc, void *shared_data);
+struct sf_node *sf_create_const_node(struct sf_graph *graph, struct sf_tensor_desc desc, const void *data);
 
 // create a new add node
 struct sf_node *sf_create_add_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *y);
