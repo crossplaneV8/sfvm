@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "onnx.pb-c.h"
-#include "graph.h"
+#include "graph/graph.h"
 
 
 static Onnx__ModelProto *_load_onnx_model(const char *path)

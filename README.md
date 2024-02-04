@@ -15,7 +15,7 @@ SFVM是一个纯C代码实现的轻量且高效的AI编译器，试图解决当�
 # 运行demo
 ```bash
 cd sfvm
-gcc -O2 -Isrc -Isrc/onnx src/*.c src/onnx/*.c demo.c -o demo -s
+gcc -O2 -Isrc -Isrc/onnx src/base/*.c src/graph/*.c src/optimizer/*.c src/onnx/*.c demo.c -o demo -s
 ./demo
 ```
 也可用CodeBlocks IDE打开工程文件sfvm.cbp编译运行

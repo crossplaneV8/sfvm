@@ -11,12 +11,11 @@
 				<Option object_output="obj/Release/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option use_console_runner="0" />
 				<Compiler>
 					<Add option="-O2" />
 					<Add option="-Wno-unknown-pragmas" />
-					<Add directory="src/onnx" />
 					<Add directory="src" />
+					<Add directory="src/onnx" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
@@ -29,26 +28,22 @@
 		<Unit filename="demo.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/base_struct.c">
+		<Unit filename="src/base/base_struct.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/base_struct.h" />
-		<Unit filename="src/graph.c">
+		<Unit filename="src/base/base_struct.h" />
+		<Unit filename="src/base/mem_alloc.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/graph.h" />
-		<Unit filename="src/mem_alloc.c">
+		<Unit filename="src/base/mem_alloc.h" />
+		<Unit filename="src/graph/graph.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/mem_alloc.h" />
-		<Unit filename="src/mutator.c">
+		<Unit filename="src/graph/graph.h" />
+		<Unit filename="src/graph/node.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/mutator.h" />
-		<Unit filename="src/node.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="src/node.h" />
+		<Unit filename="src/graph/node.h" />
 		<Unit filename="src/onnx/onnx.pb-c.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -60,6 +55,11 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/onnx/protobuf-c.h" />
+		<Unit filename="src/optimizer/mutator.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/optimizer/mutator.h" />
+		<Unit filename="src/sfvm.h" />
 		<Extensions>
 			<code_completion />
 			<envvars />
