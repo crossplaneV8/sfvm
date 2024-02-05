@@ -28,6 +28,12 @@
 		<Unit filename="demo.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="src/backend/code_gen.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/backend/vm.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="src/base/base_struct.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -55,10 +61,40 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/onnx/protobuf-c.h" />
+		<Unit filename="src/optimizer/batchnorm_rewrite.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/optimizer/convert_layout.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/optimizer/fold_constant.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/optimizer/fuse_conv.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/optimizer/merge_redundant.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="src/optimizer/mutator.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/optimizer/mutator.h" />
+		<Unit filename="src/optimizer/remove_identity.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/optimizer/remove_unreachable.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/optimizer/reshape_rewrite.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/optimizer/simplify_expr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/optimizer/swap_transpose.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="src/sfvm.h" />
 		<Extensions>
 			<code_completion />

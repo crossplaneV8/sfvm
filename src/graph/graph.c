@@ -356,7 +356,7 @@ static void _print_node_attr(FILE *f, struct sf_node *node)
             struct sf_const_attrs *attrs = node->attrs;
             fprintf(f, "shape: ");
             _print_vec_i32(f, attrs->data_desc.num_dims, attrs->data_desc.shape);
-            fprintf(f, ", dtype: %s", sf_get_dtype_name(node->o_desc.dtype));
+            fprintf(f, ", dtype: %s", sf_get_dtype_name(attrs->data_desc.dtype));
             break;
         }
         case OP_ADD:        break;

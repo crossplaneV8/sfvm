@@ -6,20 +6,21 @@
 // run graph optimizations
 void sf_run_optimization(struct sf_graph *graph)
 {
-    // pass function list
-    sf_transform_func func_list[] = {
-        sf_replace_with_reshape,
-        sf_batchnorm_to_mul_add,
-        sf_fuse_conv_mul_add_relu,
-        sf_convert_layout_NHWC_OHWI,
-        sf_replace_with_reshape,
-        sf_swap_transpose,
-        sf_merge_consecutive_nodes,
-        sf_fold_const,
-        sf_identity_transform,
+    // graph mutator list
+    struct sf_mutator mutators[] = {
+        sf_convert_to_reshape(),
+        sf_batchnorm_to_mul_add(),
+        sf_remove_identity(),
+        sf_fuse_conv_mul_add_relu(),
+        sf_convert_layout_NHWC_OHWI(),
+        sf_convert_to_reshape(),
+        sf_swap_transpose(),
+        sf_merge_redundant(),
+        sf_fold_constant(),
+        sf_remove_unreachable(),
     };
-    int num = sizeof(func_list) / sizeof(func_list[0]);
-    sf_run_graph_transforms(graph, num, func_list);
+    int num = sizeof(mutators) / sizeof(mutators[0]);
+    sf_run_mutators(graph, num, mutators);
 }
 
 

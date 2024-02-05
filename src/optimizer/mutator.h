@@ -14,49 +14,54 @@
 
 struct sf_mutator;
 
-typedef struct sf_node* (*sf_transform_func)(struct sf_mutator*, struct sf_node*, struct sf_node**);
+typedef void (*sf_mutator_init)(struct sf_mutator*);
+typedef void (*sf_mutator_clean)(struct sf_mutator*);
+typedef struct sf_node* (*sf_mutator_visit)(struct sf_mutator*, struct sf_node*, struct sf_node**);
 
 
 // graph mutator
 struct sf_mutator
 {
-    struct sf_graph *graph;
-    struct sf_dict *memo_map;
-    sf_transform_func func;
+    struct sf_graph *graph;     // target graph
+    struct sf_dict *memo;       // memo map {old_node ==> new_node}
+    void *backup;               // backup objects
+
+    sf_mutator_init init;       // init backup objects
+    sf_mutator_clean clean;     // clean backup objects
+    sf_mutator_visit visit;     // create new nodes while visiting old nodes
 };
 
 
-// run graph transforms
-void sf_run_graph_transforms(struct sf_graph *graph, int num,
-                             sf_transform_func func_list[]);
+// run mutators on graph
+void sf_run_mutators(struct sf_graph *graph, int num, struct sf_mutator muts[]);
 
 
-// clone nodes recursively
-struct sf_node *sf_identity_transform(struct sf_mutator *mut, struct sf_node *node, struct sf_node **new_args);
+// remove unreachable nodes in the graph
+struct sf_mutator sf_remove_unreachable(void);
 
 // remove identity nodes
-struct sf_node *sf_remove_identity(struct sf_mutator *mut, struct sf_node *node, struct sf_node **new_args);
+struct sf_mutator sf_remove_identity(void);
 
 // convert (squeeze, flatten, transpose) to reshape
-struct sf_node *sf_replace_with_reshape(struct sf_mutator *mut, struct sf_node *node, struct sf_node **new_args);
+struct sf_mutator sf_convert_to_reshape(void);
 
-// merge consecutive nodes
-struct sf_node *sf_merge_consecutive_nodes(struct sf_mutator *mut, struct sf_node *node, struct sf_node **new_args);
-
-// convert batch-norm to mul and add node
-struct sf_node *sf_batchnorm_to_mul_add(struct sf_mutator *mut, struct sf_node *node, struct sf_node **new_args);
+// convert batch-norm to mul and add
+struct sf_mutator sf_batchnorm_to_mul_add(void);
 
 // fuse (mul, add, relu) into conv
-struct sf_node *sf_fuse_conv_mul_add_relu(struct sf_mutator *mut, struct sf_node *node, struct sf_node **new_args);
+struct sf_mutator sf_fuse_conv_mul_add_relu(void);
 
 // convert tensor layout to (NHWC, OHWI)
-struct sf_node *sf_convert_layout_NHWC_OHWI(struct sf_mutator *mut, struct sf_node *node, struct sf_node **new_args);
+struct sf_mutator sf_convert_layout_NHWC_OHWI(void);
 
 // calc(transpose(x)) ==> transpose(calc(x))
-struct sf_node *sf_swap_transpose(struct sf_mutator *mut, struct sf_node *node, struct sf_node **new_args);
+struct sf_mutator sf_swap_transpose(void);
+
+// merge consecutive reshape or transpose nodes
+struct sf_mutator sf_merge_redundant(void);
 
 // convert constant expr to const node
-struct sf_node *sf_fold_const(struct sf_mutator *mut, struct sf_node *node, struct sf_node **new_args);
+struct sf_mutator sf_fold_constant(void);
 
 
 #ifdef __cplusplus
