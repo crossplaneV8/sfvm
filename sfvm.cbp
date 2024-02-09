@@ -14,6 +14,8 @@
 				<Compiler>
 					<Add option="-O2" />
 					<Add option="-Wno-unknown-pragmas" />
+					<Add option="-mavx2" />
+					<Add option="-mfma" />
 					<Add directory="src" />
 					<Add directory="src/onnx" />
 				</Compiler>
@@ -25,13 +27,14 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
-		<Unit filename="demo.c">
+		<Unit filename="demo/demo.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/backend/code_gen.c">
+		<Unit filename="src/backend/backend.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/backend/vm.c">
+		<Unit filename="src/backend/backend.h" />
+		<Unit filename="src/backend/engine.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/base/base_struct.c">
@@ -42,6 +45,25 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/base/mem_alloc.h" />
+		<Unit filename="src/compute_lib/broadcast.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/compute_lib/compute_lib.h" />
+		<Unit filename="src/compute_lib/convolution.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/compute_lib/gemm.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/compute_lib/pooling.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/compute_lib/transpose.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/compute_lib/vector_op.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="src/graph/graph.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -89,17 +111,10 @@
 		<Unit filename="src/optimizer/reshape_rewrite.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/optimizer/simplify_expr.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="src/optimizer/swap_transpose.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/sfvm.h" />
-		<Extensions>
-			<code_completion />
-			<envvars />
-			<debugger />
-		</Extensions>
+		<Extensions />
 	</Project>
 </CodeBlocks_project_file>

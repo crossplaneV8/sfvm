@@ -33,16 +33,21 @@ void sf_set_in_desc(struct sf_graph *graph, const char *name, struct sf_tensor_d
         if (node->op_type == OP_INPUT) {
             struct sf_input_attrs *attrs = node->attrs;
             if (strcmp(attrs->name, name) == 0) {
-                attrs->data_desc = desc; break;
+                attrs->data_desc = desc; return;
             }
         }
     }
+    printf("warning: there is no input node named \"%s\"\n", name);
 }
 
 
 static void _infer_input(struct sf_node *node)
 {
     struct sf_input_attrs *attrs = node->attrs;
+    if (attrs->data_desc.dtype == SF_UNKNOWN) {
+        printf("error: tensor desc of input \"%s\" unspecified\n", attrs->name);
+        abort();
+    }
     node->o_desc = attrs->data_desc;
 }
 

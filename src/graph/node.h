@@ -81,7 +81,8 @@ struct sf_node
 {
     enum sf_op_type op_type;            // type of operator
 
-    int index;                          // index of node in the graph
+    int index;                          // node index in the graph
+    int ref_num;                        // number of out edges
 
     int num_args;                       // number of input arguments
     struct sf_node *args[SF_MAX_ARGS];  // list of input arguments
@@ -210,11 +211,12 @@ size_t sf_tensor_prod(struct sf_tensor_desc desc);
 size_t sf_tensor_size(struct sf_tensor_desc desc);
 
 
+// create a new node
+struct sf_node *sf_create_node(struct sf_graph *graph, enum sf_op_type type,
+                               int num_args, struct sf_node **args, void *attrs);
+
 // clone an existing node into the graph
 struct sf_node *sf_clone_node(struct sf_graph *graph, struct sf_node *node, struct sf_node **new_args);
-
-// create a new node
-struct sf_node *sf_create_node(struct sf_graph *graph, enum sf_op_type type, void *attrs);
 
 // create a new input node
 struct sf_node *sf_create_input_node(struct sf_graph *graph, const char *name, struct sf_tensor_desc desc);

@@ -35,6 +35,9 @@ struct sf_mutator
 // run mutators on graph
 void sf_run_mutators(struct sf_graph *graph, int num, struct sf_mutator muts[]);
 
+// run graph optimizations
+void sf_run_optimization(struct sf_graph *graph);
+
 
 // remove unreachable nodes in the graph
 struct sf_mutator sf_remove_unreachable(void);
