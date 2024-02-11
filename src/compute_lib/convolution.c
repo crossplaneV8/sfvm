@@ -129,16 +129,49 @@ static struct vm_imat _gen_imat(struct sf_allocator *alloc, float *data,
 }
 
 
+// separate zero padding from small channel convolution
+static float *_zero_pad(struct sf_allocator *alloc, int n, int h0, int w0,
+                        int c, int ph, int pw, int h1, int w1, float *src)
+{
+    float *buf = sf_malloc(alloc, n*h1*w1*c*sizeof(float));
+
+    for (int i=0; i<n; i++) {
+        float *dst = buf + i*h1*w1*c + ph*w1*c + pw*c;
+        vm_clear_f32(buf + i*h1*w1*c, h1*w1*c);
+
+        for (int j=0; j<h0; j++) {
+            vm_copy_f32(src, dst, w0 * c);
+            src += w0 * c;
+            dst += w1 * c;
+        }
+    }
+    return buf;
+}
+
+
 // convolution (NHWC OHWI layout)
 void vm_conv_nhwc_ohwi_f32(struct sf_allocator *alloc, float *x, float *w, float *b, float *y,
                            int ni, int hi, int wi, int ci, int no, int ho, int wo, int co,
                            int ph, int pw, int sh, int sw, int kh, int kw, int dh, int dw, int relu)
 {
-    struct vm_imat mat = _gen_imat(alloc, x, ni, hi, wi, ci, no, ho,
-                                   wo, co, ph, pw, sh, sw, kh, kw, dh, dw);
-    vm_implicit_gemm_f32(alloc, mat.rows, co, mat.cols, (void*)mat.data,
-                         mat.segs, mat.len, w, mat.cols, y, co, b, relu);
-    sf_free(mat.data);
+    if ((ph > 0 || pw > 0) && ci < 8 && dh == 1 && dw == 1) {
+        const int h1 = kh + (ho - 1) * sh;
+        const int w1 = kw + (wo - 1) * sw;
+        float *x_pad = _zero_pad(alloc, ni, hi, wi, ci, ph, pw, h1, w1, x);
+        struct vm_imat mat = _gen_imat(alloc, x_pad, ni, h1, w1, ci, no, ho,
+                                       wo, co, 0, 0, sh, sw, kh, kw, dh, dw);
+        vm_implicit_gemm_f32(alloc, mat.rows, co, mat.cols, (void*)mat.data,
+                             mat.segs, mat.len, w, mat.cols, y, co, b, relu);
+        sf_free(mat.data);
+        sf_free(x_pad);
+    }
+    else {
+        struct vm_imat mat = _gen_imat(alloc, x, ni, hi, wi, ci, no, ho, wo,
+                                       co, ph, pw, sh, sw, kh, kw, dh, dw);
+        vm_implicit_gemm_f32(alloc, mat.rows, co, mat.cols, (void*)mat.data,
+                             mat.segs, mat.len, w, mat.cols, y, co, b, relu);
+        sf_free(mat.data);
+    }
 }
 
 

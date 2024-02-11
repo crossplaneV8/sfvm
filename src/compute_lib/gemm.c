@@ -2,36 +2,6 @@
 #include "compute_lib.h"
 
 
-// buf[i] = 0
-static inline void _clear_f32(float *buf, int len)
-{
-    const __m256i Z = _mm256_setzero_si256();
-    uint32_t *p = (void*)buf;
-
-    while (len >= 32) {
-        _mm256_storeu_si256((void*)(p + 0), Z);
-        _mm256_storeu_si256((void*)(p + 8), Z);
-        _mm256_storeu_si256((void*)(p + 16), Z);
-        _mm256_storeu_si256((void*)(p + 24), Z);
-        p += 32; len -= 32;
-    }
-    switch (len >> 3) {
-        case 3: _mm256_storeu_si256((void*)p, Z); p += 8;
-        case 2: _mm256_storeu_si256((void*)p, Z); p += 8;
-        case 1: _mm256_storeu_si256((void*)p, Z); p += 8;
-    }
-    switch (len & 7) {
-        case 7: p[6] = 0;
-        case 6: p[5] = 0;
-        case 5: p[4] = 0;
-        case 4: p[3] = 0;
-        case 3: p[2] = 0;
-        case 2: p[1] = 0;
-        case 1: p[0] = 0;
-    }
-}
-
-
 // broadcast bias to 16*16 matrix
 static inline void _broadcast_bias_16x16(const float *bias, float *dst)
 {
@@ -188,7 +158,6 @@ static void _mat_to_block_T(int rows, int cols,
         src += 16*step; cols -= 16;
     }
     if (cols > 0) {
-        _clear_f32(dst, rows*16);
         vm_transpose_mat_f32(cols, rows, src, step, dst, 16);
     }
 }
@@ -229,9 +198,6 @@ static void _mat_to_block_N(int rows, int cols,
     if (cols > 0) {
         int n = cols / 16, r = cols & 15;
 
-        if (r > 0) {
-            _clear_f32(dst + n*stride, stride);
-        }
         for (int i=0; i<rows; i++) {
             const float *p = src + i*step;
             float *q = dst + i*16;
@@ -264,13 +230,14 @@ static void _mat_to_block(int trans, int rows, int cols,
 
 
 // convert implicit matrix to transposed block
-static inline void _implicit_transpose_16x(int seg, int len,
-                                           const float **src, float *dst)
+static void _imat_transpose_16x(int seg, int len,
+                                const float **src, float *dst)
 {
     __m256 S0, S1, S2, S3, S4, S5, S6, S7;
     __m256 T0, T1, T2, T3, T4, T5, T6, T7;
 
-    for (int i=0; i<len; i+=8) {
+    int i = 0;
+    while (i <= len - 8) {
         for (int j=0; j<2; j++) {
             const float **p = src + j*8*seg;
             float *q = dst + i*16 + j*8;
@@ -320,30 +287,36 @@ static inline void _implicit_transpose_16x(int seg, int len,
             _mm256_storeu_ps(q + 96, T6);
             _mm256_storeu_ps(q + 112, T7);
         }
+        i += 8;
+    }
+    if (i < len) {
+        for (int j=0; j<16; j++) {
+            for (int k=i; k<len; k++) {
+                dst[k*16 + j] = src[j*seg][k];
+            }
+        }
     }
 }
 
 
 // convert implicit matrix to transposed block
-static void _implicit_mat_to_block_T(int rows, int cols,
-                                     int seg, int len,
-                                     const float **src, float *dst)
+static void _imat_to_block(int rows, int cols, int seg, int len,
+                           const float **src, float *dst)
 {
     const int nw = cols / 16, rw = cols & 15;
 
     for (int i=0; i<nw; i++) {
         for (int j=0; j<seg; j++) {
-            _implicit_transpose_16x(seg, len, src + j, dst);
+            _imat_transpose_16x(seg, len, src + j, dst);
             dst += 16 * len;
         }
         src += 16 * seg;
     }
     if (rw > 0) {
-        _clear_f32(dst, rows * 16);
         for (int k=0; k<seg; k++) {
             for (int j=0; j<rw; j++) {
                 for (int i=0; i<len; i++) {
-                    dst[i*16+j] = src[j*seg+k][i];
+                    dst[i*16 + j] = src[j*seg + k][i];
                 }
             }
             dst += 16 * len;
@@ -357,23 +330,6 @@ static void _gemm_kernel_16x16(int k, const float *a,
                                const float *b, float *y)
 {
     __m256 K0, K1, X0, X1, Y0, Y1, Y2, Y3, Y4, Y5, Y6, Y7;
-
-#define GEN_FMA_CODE(p,q) {                 \
-    X0 = _mm256_loadu_ps((q) + 0);          \
-    X1 = _mm256_loadu_ps((q) + 8);          \
-    K0 = _mm256_broadcast_ss((p) + 0);      \
-    K1 = _mm256_broadcast_ss((p) + 1);      \
-    Y0 = _mm256_fmadd_ps(K0, X0, Y0);       \
-    Y1 = _mm256_fmadd_ps(K0, X1, Y1);       \
-    Y2 = _mm256_fmadd_ps(K1, X0, Y2);       \
-    Y3 = _mm256_fmadd_ps(K1, X1, Y3);       \
-    K0 = _mm256_broadcast_ss((p) + 2);      \
-    K1 = _mm256_broadcast_ss((p) + 3);      \
-    Y4 = _mm256_fmadd_ps(K0, X0, Y4);       \
-    Y5 = _mm256_fmadd_ps(K0, X1, Y5);       \
-    Y6 = _mm256_fmadd_ps(K1, X0, Y6);       \
-    Y7 = _mm256_fmadd_ps(K1, X1, Y7);       \
-}
 
     while (k >= 32) {
         for (int j=0; j<4; j++) {
@@ -389,11 +345,22 @@ static void _gemm_kernel_16x16(int k, const float *a,
             Y6 = _mm256_loadu_ps(dst + 48);
             Y7 = _mm256_loadu_ps(dst + 56);
 
-            for (int x=0; x<8; x++) {
-                GEN_FMA_CODE(p, q); p += 16; q += 16;
-                GEN_FMA_CODE(p, q); p += 16; q += 16;
-                GEN_FMA_CODE(p, q); p += 16; q += 16;
-                GEN_FMA_CODE(p, q); p += 16; q += 16;
+            for (int i=0; i<32; i++) {
+                X0 = _mm256_loadu_ps(q + 0);
+                X1 = _mm256_loadu_ps(q + 8);
+                K0 = _mm256_broadcast_ss(p + 0);
+                K1 = _mm256_broadcast_ss(p + 1);
+                Y0 = _mm256_fmadd_ps(K0, X0, Y0);
+                Y1 = _mm256_fmadd_ps(K0, X1, Y1);
+                Y2 = _mm256_fmadd_ps(K1, X0, Y2);
+                Y3 = _mm256_fmadd_ps(K1, X1, Y3);
+                K0 = _mm256_broadcast_ss(p + 2);
+                K1 = _mm256_broadcast_ss(p + 3);
+                Y4 = _mm256_fmadd_ps(K0, X0, Y4);
+                Y5 = _mm256_fmadd_ps(K0, X1, Y5);
+                Y6 = _mm256_fmadd_ps(K1, X0, Y6);
+                Y7 = _mm256_fmadd_ps(K1, X1, Y7);
+                p += 16; q += 16;
             }
             _mm256_storeu_ps(dst + 0, Y0);
             _mm256_storeu_ps(dst + 8, Y1);
@@ -422,16 +389,22 @@ static void _gemm_kernel_16x16(int k, const float *a,
             Y6 = _mm256_loadu_ps(dst + 48);
             Y7 = _mm256_loadu_ps(dst + 56);
 
-            for (int x=k; x>=4; x-=4) {
-                GEN_FMA_CODE(p, q); p += 16; q += 16;
-                GEN_FMA_CODE(p, q); p += 16; q += 16;
-                GEN_FMA_CODE(p, q); p += 16; q += 16;
-                GEN_FMA_CODE(p, q); p += 16; q += 16;
-            }
-            switch (k & 3) {
-                case 3: GEN_FMA_CODE(p, q); p += 16; q += 16;
-                case 2: GEN_FMA_CODE(p, q); p += 16; q += 16;
-                case 1: GEN_FMA_CODE(p, q); p += 16; q += 16;
+            for (int i=0; i<k; i++) {
+                X0 = _mm256_loadu_ps(q + 0);
+                X1 = _mm256_loadu_ps(q + 8);
+                K0 = _mm256_broadcast_ss(p + 0);
+                K1 = _mm256_broadcast_ss(p + 1);
+                Y0 = _mm256_fmadd_ps(K0, X0, Y0);
+                Y1 = _mm256_fmadd_ps(K0, X1, Y1);
+                Y2 = _mm256_fmadd_ps(K1, X0, Y2);
+                Y3 = _mm256_fmadd_ps(K1, X1, Y3);
+                K0 = _mm256_broadcast_ss(p + 2);
+                K1 = _mm256_broadcast_ss(p + 3);
+                Y4 = _mm256_fmadd_ps(K0, X0, Y4);
+                Y5 = _mm256_fmadd_ps(K0, X1, Y5);
+                Y6 = _mm256_fmadd_ps(K1, X0, Y6);
+                Y7 = _mm256_fmadd_ps(K1, X1, Y7);
+                p += 16; q += 16;
             }
             _mm256_storeu_ps(dst + 0, Y0);
             _mm256_storeu_ps(dst + 8, Y1);
@@ -451,10 +424,11 @@ void vm_gemm_f32(struct sf_allocator *alloc, int trans_a, int trans_b,
                  int m, int n, int k, const float *a, int lda, const float *b,
                  int ldb, float *c, int ldc, const float *bias, int relu)
 {
-    const int np = ((n + 15) / 16) * 16;
-    const int dm = 64, da = (trans_a ? dm : dm*lda), dc = dm*ldc;
-    float *buf_a = sf_malloc(alloc, k*dm*sizeof(float));
-    float *buf_b = sf_malloc(alloc, k*np*sizeof(float));
+    float zeros[16] = {0}, tmp[256] __attribute__((aligned(32)));
+    const int np = (n + 15) & (~15), dm = 64;
+    const int da = (trans_a ? dm : dm * lda), dc = dm * ldc;
+    float *buf_a = sf_malloc(alloc, k * dm * sizeof(float));
+    float *buf_b = sf_malloc(alloc, k * np * sizeof(float));
     _mat_to_block(trans_b, k, n, b, ldb, buf_b);
 
     while (m > 0) {
@@ -466,12 +440,7 @@ void vm_gemm_f32(struct sf_allocator *alloc, int trans_a, int trans_b,
 
             for (int i=0; i<H; i+=16) {
                 const int h = H-i < 16 ? H-i : 16;
-                float tmp[256] __attribute__((aligned(32)));
-                if (bias != NULL) {
-                    _broadcast_bias_16x16(bias + j, tmp);
-                } else {
-                    _clear_f32(tmp, 256);
-                }
+                _broadcast_bias_16x16(bias ? bias + j : zeros, tmp);
                 _gemm_kernel_16x16(k, buf_a + i*k, buf_b + j*k, tmp);
                 _copy_mat_relu(h, w, tmp, 16, c + i*ldc + j, ldc, relu);
             }
@@ -488,27 +457,23 @@ void vm_implicit_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
                           const float **a, int seg, int len, const float *b,
                           int ldb, float *c, int ldc, const float *bias, int relu)
 {
-    const int np = ((n + 15) / 16) * 16;
-    const int dm = 64, da = dm*seg, dc = dm*ldc;
-    float *buf_a = sf_malloc(alloc, k*dm*sizeof(float));
-    float *buf_b = sf_malloc(alloc, k*np*sizeof(float));
+    float zeros[16] = {0}, tmp[256] __attribute__((aligned(32)));
+    const int np = (n + 15) & (~15), dm = 64;
+    const int da = dm * seg, dc = dm * ldc;
+    float *buf_a = sf_malloc(alloc, k * dm * sizeof(float));
+    float *buf_b = sf_malloc(alloc, k * np * sizeof(float));
     _mat_to_block_T(k, n, b, ldb, buf_b);
 
     while (m > 0) {
         const int H = m < dm ? m : dm;
-        _implicit_mat_to_block_T(k, H, seg, len, a, buf_a);
+        _imat_to_block(k, H, seg, len, a, buf_a);
 
         for (int j=0; j<n; j+=16) {
             const int w = n-j < 16 ? n-j : 16;
 
             for (int i=0; i<H; i+=16) {
                 const int h = H-i < 16 ? H-i : 16;
-                float tmp[256] __attribute__((aligned(32)));
-                if (bias != NULL) {
-                    _broadcast_bias_16x16(bias + j, tmp);
-                } else {
-                    _clear_f32(tmp, 256);
-                }
+                _broadcast_bias_16x16(bias ? bias + j : zeros, tmp);
                 _gemm_kernel_16x16(k, buf_a + i*k, buf_b + j*k, tmp);
                 _copy_mat_relu(h, w, tmp, 16, c + i*ldc + j, ldc, relu);
             }

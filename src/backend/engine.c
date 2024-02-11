@@ -146,10 +146,10 @@ void sf_engine_run(struct sf_engine *engine)
                 float *c = addr[*pc++];
                 float *y = addr[*pc++];
                 int trans_a = *pc++, trans_b = *pc++;
-                int m = *pc++, n = *pc++, k = *pc++;
+                int m = *pc++, n = *pc++, k = *pc++, relu = *pc++;
                 int lda = (trans_a ? m : k), ldb = (trans_b ? k : n);
                 vm_gemm_f32(engine->alloc, trans_a, trans_b,
-                            m, n, k, a, lda, b, ldb, y, n, c, 0);
+                            m, n, k, a, lda, b, ldb, y, n, c, relu);
                 break;
             }
         }
@@ -180,7 +180,7 @@ void sf_print_code(FILE *f, struct sf_engine *engine)
             case VM_TRANSPOSE_2D_F32:   name = "VM_TRANSPOSE_2D_F32";   regs = 2; args = 4; break;
             case VM_TRANSPOSE_3D_F32:   name = "VM_TRANSPOSE_3D_F32";   regs = 2; args = 6; break;
             case VM_TRANSPOSE_4D_F32:   name = "VM_TRANSPOSE_4D_F32";   regs = 2; args = 8; break;
-            case VM_GEMM_F32:           name = "VM_GEMM_F32";           regs = 4; args = 5; break;
+            case VM_GEMM_F32:           name = "VM_GEMM_F32";           regs = 4; args = 6; break;
             default: return;
         }
         if (name != NULL) {

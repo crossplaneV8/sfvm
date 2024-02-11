@@ -219,6 +219,27 @@ static int _gen_add(struct sf_engine *engine, struct sf_node *node)
 }
 
 
+static int _is_gemm_equivalent(struct sf_node *node)
+{
+    struct sf_conv_attrs *attrs = node->attrs;
+    const int *x_shape = node->args[0]->o_desc.shape;
+    const int *w_shape = node->args[1]->o_desc.shape;
+
+    if (attrs->pad_h0 == 0 && attrs->pad_h1 == 0 && attrs->pad_w0 == 0 && attrs->pad_w1 == 0) {
+        if (w_shape[1] == 1 && w_shape[2] == 1 && attrs->stride_h == 1 && attrs->stride_w == 1) {
+            return 1;
+        }
+        if (w_shape[1] == 1 && w_shape[2] == x_shape[2] && attrs->stride_h == 1) {
+            return 1;
+        }
+        if (w_shape[1] == x_shape[1] && w_shape[2] == x_shape[2]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
 static int _gen_conv(struct sf_engine *engine, struct sf_node *node)
 {
     struct sf_conv_attrs *attrs = node->attrs;
@@ -231,20 +252,40 @@ static int _gen_conv(struct sf_engine *engine, struct sf_node *node)
         b_reg = engine->reg_map[node->args[2]->index];
     }
     if (strcmp(attrs->x_layout, "NHWC") == 0 && strcmp(attrs->w_layout, "OHWI") == 0) {
-        _push_code(engine, (int)VM_CONV_NHWC_OHWI_F32);
-        _push_code(engine, x_reg);
-        _push_code(engine, w_reg);
-        _push_code(engine, b_reg);
-        _push_code(engine, y_reg);
+        const int *x_shape = node->args[0]->o_desc.shape;
+        const int *w_shape = node->args[1]->o_desc.shape;
+        const int *y_shape = node->o_desc.shape;
 
-        int conv_params[] = {
-            attrs->pad_h0, attrs->pad_w0, attrs->stride_h, attrs->stride_w,
-            node->args[1]->o_desc.shape[1], node->args[1]->o_desc.shape[2],
-            attrs->dilate_h, attrs->dilate_w, attrs->has_relu,
-        };
-        _push_codes(engine, 4, node->args[0]->o_desc.shape);
-        _push_codes(engine, 4, node->o_desc.shape);
-        _push_codes(engine, 9, conv_params);
+        if (0 && _is_gemm_equivalent(node)) {
+            _push_code(engine, (int)VM_GEMM_F32);
+            _push_code(engine, x_reg);
+            _push_code(engine, w_reg);
+            _push_code(engine, b_reg);
+            _push_code(engine, y_reg);
+            _push_code(engine, 0);
+            _push_code(engine, 1);
+            _push_code(engine, y_shape[0] * y_shape[1] * y_shape[2]);
+            _push_code(engine, w_shape[0]);
+            _push_code(engine, w_shape[1] * w_shape[2] * w_shape[3]);
+            _push_code(engine, attrs->has_relu);
+        } else {
+            _push_code(engine, (int)VM_CONV_NHWC_OHWI_F32);
+            _push_code(engine, x_reg);
+            _push_code(engine, w_reg);
+            _push_code(engine, b_reg);
+            _push_code(engine, y_reg);
+
+            int conv_params[] = {
+                attrs->pad_h0, attrs->pad_w0,
+                attrs->stride_h, attrs->stride_w,
+                w_shape[1], w_shape[2],
+                attrs->dilate_h, attrs->dilate_w,
+                attrs->has_relu,
+            };
+            _push_codes(engine, 4, x_shape);
+            _push_codes(engine, 4, y_shape);
+            _push_codes(engine, 9, conv_params);
+        }
     }
     else {
         printf("not implemented:\n");
@@ -418,6 +459,7 @@ static int _gen_gemm(struct sf_engine *engine, struct sf_node *node)
     _push_code(engine, node->o_desc.shape[0]);
     _push_code(engine, node->o_desc.shape[1]);
     _push_code(engine, node->args[1]->o_desc.shape[attrs->trans_b]);
+    _push_code(engine, 0);  // relu
     return y_reg;
 }
 
