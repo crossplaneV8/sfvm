@@ -10,14 +10,11 @@ static struct sf_node *_visit(struct sf_mutator *mut, struct sf_node *node, stru
         if (strcmp(attrs->x_layout, "NHWC") != 0) {
             new_args[0] = sf_create_layout_trans_node(mut->graph, new_args[0], attrs->x_layout, "NHWC");
         }
-        if (strcmp(attrs->w_layout, "OHWI") != 0) {
-            new_args[1] = sf_create_layout_trans_node(mut->graph, new_args[1], attrs->w_layout, "OHWI");
-        }
         struct sf_node *bias = (node->num_args == 3) ? new_args[2] : NULL;
-        struct sf_node *conv = sf_create_conv_node(mut->graph, new_args[0], new_args[1], bias, "NHWC",
-                                                   "OHWI", attrs->pad_h0, attrs->pad_h1, attrs->pad_w0,
-                                                   attrs->pad_w1, attrs->stride_h, attrs->stride_w,
-                                                   attrs->dilate_h, attrs->dilate_w, attrs->has_relu);
+        struct sf_node *conv = sf_create_conv_node(mut->graph, new_args[0], new_args[1], bias, "NHWC", attrs->w_layout,
+                                                   attrs->pad_h0, attrs->pad_h1, attrs->pad_w0, attrs->pad_w1,
+                                                   attrs->stride_h, attrs->stride_w, attrs->dilate_h, attrs->dilate_w,
+                                                   attrs->kernel_h, attrs->kernel_w, attrs->kernel_o, attrs->has_relu);
         if (strcmp(attrs->x_layout, "NHWC") != 0) {
             return sf_create_layout_trans_node(mut->graph, conv, "NHWC", attrs->x_layout);
         }
@@ -47,8 +44,8 @@ static struct sf_node *_visit(struct sf_mutator *mut, struct sf_node *node, stru
 }
 
 
-// convert tensor layout to (NHWC, OHWI)
-struct sf_mutator sf_convert_layout_NHWC_OHWI(void)
+// convert tensor layout to NHWC
+struct sf_mutator sf_convert_layout_NHWC(void)
 {
     return (struct sf_mutator){.visit = _visit};
 }

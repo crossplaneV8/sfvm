@@ -46,10 +46,10 @@ static struct sf_node *_visit(struct sf_mutator *mut, struct sf_node *node, stru
                 } else {
                     bias = beta;
                 }
-                return sf_create_conv_node(mut->graph, conv->args[0], conv->args[1], bias,
-                                           attrs->x_layout, attrs->w_layout, attrs->pad_h0, attrs->pad_h1,
-                                           attrs->pad_w0, attrs->pad_w1, attrs->stride_h, attrs->stride_w,
-                                           attrs->dilate_h, attrs->dilate_w, attrs->has_relu);
+                return sf_create_conv_node(mut->graph, conv->args[0], conv->args[1], bias, attrs->x_layout,
+                                           attrs->w_layout, attrs->pad_h0, attrs->pad_h1, attrs->pad_w0, attrs->pad_w1,
+                                           attrs->stride_h, attrs->stride_w, attrs->dilate_h, attrs->dilate_w,
+                                           attrs->kernel_h, attrs->kernel_w, attrs->kernel_o, attrs->has_relu);
             }
         }
     }
@@ -57,10 +57,11 @@ static struct sf_node *_visit(struct sf_mutator *mut, struct sf_node *node, stru
         struct sf_node *conv = new_args[0];
         if (conv->op_type == OP_CONV) {
             struct sf_conv_attrs *attrs = conv->attrs;
-            return sf_create_conv_node(mut->graph, conv->args[0], conv->args[1], conv->args[2],
-                                       attrs->x_layout, attrs->w_layout, attrs->pad_h0, attrs->pad_h1,
-                                       attrs->pad_w0, attrs->pad_w1, attrs->stride_h, attrs->stride_w,
-                                       attrs->dilate_h, attrs->dilate_w, 1);
+            struct sf_node *bias = (conv->num_args == 3) ? conv->args[2] : NULL;
+            return sf_create_conv_node(mut->graph, conv->args[0], conv->args[1], bias, attrs->x_layout,
+                                       attrs->w_layout, attrs->pad_h0, attrs->pad_h1, attrs->pad_w0, attrs->pad_w1,
+                                       attrs->stride_h, attrs->stride_w, attrs->dilate_h, attrs->dilate_w,
+                                       attrs->kernel_h, attrs->kernel_w, attrs->kernel_o, 1);
         }
     }
     return sf_clone_node(mut->graph, node, new_args);

@@ -54,8 +54,14 @@ struct sf_mutator sf_batchnorm_to_mul_add(void);
 // fuse (mul, add, relu) into conv
 struct sf_mutator sf_fuse_conv_mul_add_relu(void);
 
-// convert tensor layout to (NHWC, OHWI)
-struct sf_mutator sf_convert_layout_NHWC_OHWI(void);
+// relu(add(x, y)) ==> add_relu(x, y)
+struct sf_mutator sf_fuse_add_relu(void);
+
+// convert tensor layout to NHWC
+struct sf_mutator sf_convert_layout_NHWC(void);
+
+// convert conv weight layout to NK16 or OHWI
+struct sf_mutator sf_pack_conv_weight(void);
 
 // calc(transpose(x)) ==> transpose(calc(x))
 struct sf_mutator sf_swap_transpose(void);

@@ -34,6 +34,9 @@ void vm_mul_f32(float *x, float *y, float *z, int num);
 // y[i] = max(x[i], 0)
 void vm_relu_f32(float *x, float *y, int num);
 
+// z[i] = max(x[i] + y[i], 0)
+void vm_add_relu_f32(float *x, float *y, float *z, int num);
+
 
 // broadcast add 1d tensor
 void vm_add_1d_f32(float *x, float *y, float *z, int nx, int ny);
@@ -83,13 +86,23 @@ void vm_gemm_f32(struct sf_allocator *alloc, int trans_a, int trans_b,
                  int m, int n, int k, const float *a, int lda, const float *b,
                  int ldb, float *c, int ldc, const float *bias, int relu);
 
-// implicit GEMM
+// GEMM with implicit matrix A
 void vm_implicit_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
                           const float **a, int seg, int len, const float *b,
                           int ldb, float *c, int ldc, const float *bias, int relu);
 
-// convolution (NHWC OHWI layout)
+// GEMM with implicit matrix A and NK16-packed matrix B
+void vm_implicit_packed_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
+                                 const float **a, int seg, int len, const float *b,
+                                 float *c, int ldc, const float *bias, int relu);
+
+// convolution (data: NHWC, weight: OHWI)
 void vm_conv_nhwc_ohwi_f32(struct sf_allocator *alloc, float *x, float *w, float *b, float *y,
+                           int ni, int hi, int wi, int ci, int no, int ho, int wo, int co,
+                           int ph, int pw, int sh, int sw, int kh, int kw, int dh, int dw, int relu);
+
+// convolution (data: NHWC weight: NK16-packed)
+void vm_conv_nhwc_nk16_f32(struct sf_allocator *alloc, float *x, float *w, float *b, float *y,
                            int ni, int hi, int wi, int ci, int no, int ho, int wo, int co,
                            int ph, int pw, int sh, int sw, int kh, int kw, int dh, int dw, int relu);
 

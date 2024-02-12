@@ -16,11 +16,13 @@
 					<Add option="-Wno-unknown-pragmas" />
 					<Add option="-mavx2" />
 					<Add option="-mfma" />
+					<Add option="-fopenmp" />
 					<Add directory="src" />
 					<Add directory="src/onnx" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
+					<Add option="-lgomp" />
 				</Linker>
 			</Target>
 		</Build>
@@ -92,6 +94,9 @@
 		<Unit filename="src/optimizer/fold_constant.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="src/optimizer/fuse_add_relu.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="src/optimizer/fuse_conv.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -102,6 +107,9 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/optimizer/mutator.h" />
+		<Unit filename="src/optimizer/pack_conv_weight.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="src/optimizer/remove_identity.c">
 			<Option compilerVar="CC" />
 		</Unit>

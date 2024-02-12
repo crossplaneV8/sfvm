@@ -105,4 +105,27 @@ void vm_relu_f32(float *x, float *y, int num)
 }
 
 
+// z[i] = max(x[i] + y[i], 0)
+void vm_add_relu_f32(float *x, float *y, float *z, int num)
+{
+#ifdef __AVX2__
+    __m256 Z = _mm256_setzero_ps();
+    while (num >= 16) {
+        __m256 X0 = _mm256_loadu_ps(x + 0);
+        __m256 X1 = _mm256_loadu_ps(x + 8);
+        __m256 Y0 = _mm256_loadu_ps(y + 0);
+        __m256 Y1 = _mm256_loadu_ps(y + 8);
+        __m256 Z0 = _mm256_max_ps(X0 + Y0, Z);
+        __m256 Z1 = _mm256_max_ps(X1 + Y1, Z);
+        _mm256_storeu_ps(z + 0, Z0);
+        _mm256_storeu_ps(z + 8, Z1);
+        x += 16; y += 16; z += 16; num -= 16;
+    }
+#endif
+    for (int i=0; i<num; i++) {
+        float a = x[i] + y[i];
+        z[i] = a > 0 ? a : 0;
+    }
+}
+
 

@@ -452,7 +452,7 @@ void vm_gemm_f32(struct sf_allocator *alloc, int trans_a, int trans_b,
 }
 
 
-// implicit GEMM
+// GEMM with implicit matrix A
 void vm_implicit_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
                           const float **a, int seg, int len, const float *b,
                           int ldb, float *c, int ldc, const float *bias, int relu)
@@ -482,6 +482,35 @@ void vm_implicit_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
     }
     sf_free(buf_a);
     sf_free(buf_b);
+}
+
+
+// GEMM with implicit matrix A and NK16-packed matrix B
+void vm_implicit_packed_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
+                                 const float **a, int seg, int len, const float *b,
+                                 float *c, int ldc, const float *bias, int relu)
+{
+    const int dm = 64, da = dm * seg, dc = dm * ldc;
+    float zeros[16] = {0}, tmp[256] __attribute__((aligned(32)));
+    float *buf_a = sf_malloc(alloc, k * dm * sizeof(float));
+
+    while (m > 0) {
+        const int H = m < dm ? m : dm;
+        _imat_to_block(k, H, seg, len, a, buf_a);
+
+        for (int j=0; j<n; j+=16) {
+            const int w = n-j < 16 ? n-j : 16;
+
+            for (int i=0; i<H; i+=16) {
+                const int h = H-i < 16 ? H-i : 16;
+                _broadcast_bias_16x16(bias ? bias + j : zeros, tmp);
+                _gemm_kernel_16x16(k, buf_a + i*k, b + j*k, tmp);
+                _copy_mat_relu(h, w, tmp, 16, c + i*ldc + j, ldc, relu);
+            }
+        }
+        a += da; c += dc; m -= dm;
+    }
+    sf_free(buf_a);
 }
 
 

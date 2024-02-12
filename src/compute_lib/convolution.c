@@ -149,7 +149,7 @@ static float *_zero_pad(struct sf_allocator *alloc, int n, int h0, int w0,
 }
 
 
-// convolution (NHWC OHWI layout)
+// convolution (data: NHWC, weight: OHWI)
 void vm_conv_nhwc_ohwi_f32(struct sf_allocator *alloc, float *x, float *w, float *b, float *y,
                            int ni, int hi, int wi, int ci, int no, int ho, int wo, int co,
                            int ph, int pw, int sh, int sw, int kh, int kw, int dh, int dw, int relu)
@@ -170,6 +170,32 @@ void vm_conv_nhwc_ohwi_f32(struct sf_allocator *alloc, float *x, float *w, float
                                        co, ph, pw, sh, sw, kh, kw, dh, dw);
         vm_implicit_gemm_f32(alloc, mat.rows, co, mat.cols, (void*)mat.data,
                              mat.segs, mat.len, w, mat.cols, y, co, b, relu);
+        sf_free(mat.data);
+    }
+}
+
+
+// convolution (data: NHWC weight: NK16-packed)
+void vm_conv_nhwc_nk16_f32(struct sf_allocator *alloc, float *x, float *w, float *b, float *y,
+                           int ni, int hi, int wi, int ci, int no, int ho, int wo, int co,
+                           int ph, int pw, int sh, int sw, int kh, int kw, int dh, int dw, int relu)
+{
+    if ((ph > 0 || pw > 0) && ci < 8 && dh == 1 && dw == 1) {
+        const int h1 = kh + (ho - 1) * sh;
+        const int w1 = kw + (wo - 1) * sw;
+        float *x_pad = _zero_pad(alloc, ni, hi, wi, ci, ph, pw, h1, w1, x);
+        struct vm_imat mat = _gen_imat(alloc, x_pad, ni, h1, w1, ci, no, ho,
+                                       wo, co, 0, 0, sh, sw, kh, kw, dh, dw);
+        vm_implicit_packed_gemm_f32(alloc, mat.rows, co, mat.cols, (void*)mat.data,
+                                    mat.segs, mat.len, w, y, co, b, relu);
+        sf_free(mat.data);
+        sf_free(x_pad);
+    }
+    else {
+        struct vm_imat mat = _gen_imat(alloc, x, ni, hi, wi, ci, no, ho, wo,
+                                       co, ph, pw, sh, sw, kh, kw, dh, dw);
+        vm_implicit_packed_gemm_f32(alloc, mat.rows, co, mat.cols, (void*)mat.data,
+                                    mat.segs, mat.len, w, y, co, b, relu);
         sf_free(mat.data);
     }
 }

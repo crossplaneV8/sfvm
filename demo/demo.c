@@ -75,7 +75,7 @@ static void _test_image_classification(struct sf_engine *engine, const char *inp
 
 int main(void)
 {
-    const char *model_path = "./demo/model/resnet18.onnx";
+    const char *model_path = "./demo/model/resnet50.onnx";
     const char *input_name = "data";
     struct sf_graph *graph = sf_load_graph_from_onnx(model_path);
 

@@ -17,7 +17,7 @@ struct sf_reg_info
     int rank;
     int size;
     int ref_cnt;
-    const void *data;
+    void *data;
 };
 
 
@@ -49,7 +49,9 @@ enum sf_vm_instr
     VM_ADD_2D_F32,
     VM_ADD_3D_F32,
     VM_ADD_4D_F32,
+    VM_ADD_RELU_F32,
     VM_CONV_NHWC_OHWI_F32,
+    VM_CONV_NHWC_NK16_F32,
     VM_MAX_POOL_NHWC_F32,
     VM_GAVG_POOL_NHWC_F32,
     VM_RELU_F32,
@@ -63,6 +65,9 @@ enum sf_vm_instr
 
 // generate inference engine from graph
 struct sf_engine *sf_engine_from_graph(struct sf_graph *graph);
+
+// clone an existing engine (share same data)
+struct sf_engine *sf_clone_engine(struct sf_engine *engine);
 
 // discard inference engine
 void sf_discard_engine(struct sf_engine *engine);

@@ -79,10 +79,12 @@ void sf_run_optimization(struct sf_graph *graph)
         sf_batchnorm_to_mul_add(),
         sf_remove_identity(),
         sf_fuse_conv_mul_add_relu(),
-        sf_convert_layout_NHWC_OHWI(),
+        sf_convert_layout_NHWC(),
+        sf_pack_conv_weight(),
         sf_convert_to_reshape(),
         sf_swap_transpose(),
         sf_merge_redundant(),
+        sf_fuse_add_relu(),
         sf_fold_constant(),
         sf_remove_unreachable(),
     };

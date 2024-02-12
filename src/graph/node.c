@@ -30,6 +30,7 @@ const char *sf_get_op_name(struct sf_node *node)
         case OP_SUB:            return "sub";
         case OP_MUL:            return "mul";
         case OP_DIV:            return "div";
+        case OP_ADD_RELU:       return "add_relu";
         case OP_CONV:           return "conv";
         case OP_AVG_POOL:       return "avgpool";
         case OP_MAX_POOL:       return "maxpool";
@@ -177,11 +178,20 @@ struct sf_node *sf_create_div_node(struct sf_graph *graph, struct sf_node *x, st
 }
 
 
+// create a new add-relu node
+struct sf_node *sf_create_add_relu_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *y)
+{
+    struct sf_node *args[] = {x, y};
+    return sf_create_node(graph, OP_ADD_RELU, 2, args, NULL);
+}
+
+
 // create a new convolution node
 struct sf_node *sf_create_conv_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *w,
                                     struct sf_node *b, const char *x_layout, const char *w_layout,
-                                    int pad_h0, int pad_h1, int pad_w0, int pad_w1, int stride_h,
-                                    int stride_w, int dilate_h, int dilate_w, int has_relu)
+                                    int pad_h0, int pad_h1, int pad_w0, int pad_w1,
+                                    int stride_h, int stride_w, int dilate_h, int dilate_w,
+                                    int kernel_h, int kernel_w, int kernel_o, int has_relu)
 {
     struct sf_conv_attrs *attrs = sf_malloc(graph->alloc, sizeof(struct sf_conv_attrs));
     strcpy(attrs->x_layout, x_layout);
@@ -194,6 +204,9 @@ struct sf_node *sf_create_conv_node(struct sf_graph *graph, struct sf_node *x, s
     attrs->stride_w = stride_w;
     attrs->dilate_h = dilate_h;
     attrs->dilate_w = dilate_w;
+    attrs->kernel_h = kernel_h;
+    attrs->kernel_w = kernel_w;
+    attrs->kernel_o = kernel_o;
     attrs->has_relu = has_relu;
 
     struct sf_node *args[] = {x, w, b};

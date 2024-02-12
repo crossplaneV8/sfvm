@@ -31,7 +31,7 @@ void sf_engine_run(struct sf_engine *engine)
     const int *pc = engine->vm_code;
 
     while (1) {
-        switch (*pc++) {
+        switch ((enum sf_vm_instr)(*pc++)) {
             case VM_STOP: return;
             case VM_ADD_1D_F32: {
                 float *x = addr[*pc++];
@@ -68,6 +68,14 @@ void sf_engine_run(struct sf_engine *engine)
                 vm_add_4d_f32(x, y, z, nx, hx, wx, cx, ny, hy, wy, cy);
                 break;
             }
+            case VM_ADD_RELU_F32: {
+                float *x = addr[*pc++];
+                float *y = addr[*pc++];
+                float *z = addr[*pc++];
+                int num = *pc++;
+                vm_add_relu_f32(x, y, z, num);
+                break;
+            }
             case VM_CONV_NHWC_OHWI_F32: {
                 float *x = addr[*pc++];
                 float *w = addr[*pc++];
@@ -79,6 +87,21 @@ void sf_engine_run(struct sf_engine *engine)
                 int kh = *pc++, kw = *pc++, dh = *pc++, dw = *pc++;
                 int relu = *pc++;
                 vm_conv_nhwc_ohwi_f32(engine->alloc, x, w, b, y,
+                                      ni, hi, wi, ci, no, ho, wo, co,
+                                      ph, pw, sh, sw, kh, kw, dh, dw, relu);
+                break;
+            }
+            case VM_CONV_NHWC_NK16_F32: {
+                float *x = addr[*pc++];
+                float *w = addr[*pc++];
+                float *b = addr[*pc++];
+                float *y = addr[*pc++];
+                int ni = *pc++, hi = *pc++, wi = *pc++, ci = *pc++;
+                int no = *pc++, ho = *pc++, wo = *pc++, co = *pc++;
+                int ph = *pc++, pw = *pc++, sh = *pc++, sw = *pc++;
+                int kh = *pc++, kw = *pc++, dh = *pc++, dw = *pc++;
+                int relu = *pc++;
+                vm_conv_nhwc_nk16_f32(engine->alloc, x, w, b, y,
                                       ni, hi, wi, ci, no, ho, wo, co,
                                       ph, pw, sh, sw, kh, kw, dh, dw, relu);
                 break;
@@ -166,13 +189,15 @@ void sf_print_code(FILE *f, struct sf_engine *engine)
     while (pc < end) {
         const char *name = NULL;
         int regs = 0, args = 0;
-        switch (*pc++) {
+        switch ((enum sf_vm_instr)(*pc++)) {
             case VM_STOP:               name = "VM_STOP";               regs = 0, args = 0; break;
             case VM_ADD_1D_F32:         name = "VM_ADD_1D_F32";         regs = 3; args = 2; break;
             case VM_ADD_2D_F32:         name = "VM_ADD_2D_F32";         regs = 3; args = 4; break;
             case VM_ADD_3D_F32:         name = "VM_ADD_3D_F32";         regs = 3; args = 6; break;
             case VM_ADD_4D_F32:         name = "VM_ADD_4D_F32";         regs = 3; args = 8; break;
+            case VM_ADD_RELU_F32:       name = "VM_ADD_RELU_F32";       regs = 3; args = 1; break;
             case VM_CONV_NHWC_OHWI_F32: name = "VM_CONV_NHWC_OHWI_F32"; regs = 4; args = 17; break;
+            case VM_CONV_NHWC_NK16_F32: name = "VM_CONV_NHWC_NK16_F32"; regs = 4; args = 17; break;
             case VM_MAX_POOL_NHWC_F32:  name = "VM_MAX_POOL_NHWC_F32";  regs = 2; args = 14; break;
             case VM_GAVG_POOL_NHWC_F32: name = "VM_GAVG_POOL_NHWC_F32"; regs = 2; args = 4; break;
             case VM_RELU_F32:           name = "VM_RELU_F32";           regs = 2; args = 1; break;
@@ -181,19 +206,15 @@ void sf_print_code(FILE *f, struct sf_engine *engine)
             case VM_TRANSPOSE_3D_F32:   name = "VM_TRANSPOSE_3D_F32";   regs = 2; args = 6; break;
             case VM_TRANSPOSE_4D_F32:   name = "VM_TRANSPOSE_4D_F32";   regs = 2; args = 8; break;
             case VM_GEMM_F32:           name = "VM_GEMM_F32";           regs = 4; args = 6; break;
-            default: return;
         }
         if (name != NULL) {
             fprintf(f, name);
-            for (int i=0; i<regs; i++) {
-                fprintf(f, " R%d,", *pc++);
-            }
-            for (int i=0; i<args; i++) {
-                fprintf(f, " %d,", *pc++);
-            }
+            for (int i=0; i<regs; i++) {fprintf(f, " R%d,", *pc++);}
+            for (int i=0; i<args; i++) {fprintf(f, " %d,", *pc++);}
             fprintf(f, "\n");
         }
     }
     fprintf(f, "\n");
 }
+
 

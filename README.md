@@ -23,7 +23,10 @@ batchnorm_to_mul_add()
 fuse_conv_mul_add_relu()
 
 // 将conv, pooling统一为NHWC layout
-convert_layout_NHWC_OHWI()
+convert_layout_NHWC()
+
+// 将权重pack成NK16格式 (消除GEMM内的矩阵pack开销)
+pack_conv_weight()
 
 // transpose节点后移
 swap_transpose()
@@ -45,4 +48,17 @@ gcc -O2 -mavx2 -mfma -Isrc -Isrc/onnx src/base/*.c src/graph/*.c src/onnx/*.c sr
 ./demo
 ```
 也可用CodeBlocks IDE打开工程文件sfvm.cbp编译运行。   
+
+
+# 性能测试
+```bash
+cd sfvm
+gcc -O2 -fopenmp -mavx2 -mfma -Isrc -Isrc/onnx src/base/*.c src/graph/*.c src/onnx/*.c src/optimizer/*.c src/backend/*.c src/compute_lib/*.c test_perf.c -o test -lgomp -s
+./test
+```
+CPU: i7-13700F
+| model     | precision | threads | FPS | TFLOPS |
+| --------- | --------- | ------- | --- | ------ |
+| ResNet-18 | float32   | 8       | 186 | 0.71   |
+| ResNet-50 | float32   | 8       | 74  | 0.58   |
 

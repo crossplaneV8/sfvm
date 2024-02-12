@@ -78,31 +78,32 @@ static void _infer_broadcast_op(struct sf_node *node)
 
 static void _infer_conv(struct sf_node *node)
 {
-    struct sf_tensor_desc x_desc = node->args[0]->o_desc;
-    struct sf_tensor_desc w_desc = node->args[1]->o_desc;
-    assert(x_desc.num_dims == 4);
-    assert(w_desc.num_dims == 4);
-
     struct sf_conv_attrs *attrs = node->attrs;
-
     int _n = find_axis(attrs->x_layout, 'N');
     int _c = find_axis(attrs->x_layout, 'C');
     int _h = find_axis(attrs->x_layout, 'H');
     int _w = find_axis(attrs->x_layout, 'W');
 
-    int kernel_h = w_desc.shape[find_axis(attrs->w_layout, 'H')];
-    int kernel_w = w_desc.shape[find_axis(attrs->w_layout, 'W')];
+    if (attrs->kernel_h == 0 || attrs->kernel_w == 0 || attrs->kernel_o == 0) {
+        struct sf_tensor_desc w_desc = node->args[1]->o_desc;
+        assert(w_desc.num_dims == 4);
+        attrs->kernel_h = w_desc.shape[find_axis(attrs->w_layout, 'H')];
+        attrs->kernel_w = w_desc.shape[find_axis(attrs->w_layout, 'W')];
+        attrs->kernel_o = w_desc.shape[find_axis(attrs->w_layout, 'O')];
+    }
+    struct sf_tensor_desc x_desc = node->args[0]->o_desc;
+    assert(x_desc.num_dims == 4);
     int in_h = attrs->pad_h0 + x_desc.shape[_h] + attrs->pad_h1;
     int in_w = attrs->pad_w0 + x_desc.shape[_w] + attrs->pad_w1;
-    kernel_h = (kernel_h - 1) * attrs->dilate_h + 1;
-    kernel_w = (kernel_w - 1) * attrs->dilate_w + 1;
+    int effect_h = (attrs->kernel_h - 1) * attrs->dilate_h + 1;
+    int effect_w = (attrs->kernel_w - 1) * attrs->dilate_w + 1;
 
     node->o_desc.dtype = x_desc.dtype;
     node->o_desc.num_dims = 4;
     node->o_desc.shape[_n] = x_desc.shape[_n];
-    node->o_desc.shape[_c] = w_desc.shape[find_axis(attrs->w_layout, 'O')];
-    node->o_desc.shape[_h] = (in_h - kernel_h) / attrs->stride_h + 1;
-    node->o_desc.shape[_w] = (in_w - kernel_w) / attrs->stride_w + 1;
+    node->o_desc.shape[_c] = attrs->kernel_o;
+    node->o_desc.shape[_h] = (in_h - effect_h) / attrs->stride_h + 1;
+    node->o_desc.shape[_w] = (in_w - effect_w) / attrs->stride_w + 1;
 }
 
 
@@ -113,7 +114,6 @@ static void _infer_pool(struct sf_node *node)
 
     int _h = find_axis(attrs->layout, 'H');
     int _w = find_axis(attrs->layout, 'W');
-
     int in_h = attrs->pad_h0 + desc.shape[_h] + attrs->pad_h1;
     int in_w = attrs->pad_w0 + desc.shape[_w] + attrs->pad_w1;
 
@@ -297,6 +297,7 @@ void sf_infer_tensor_desc(struct sf_node *node)
         case OP_SUB:        _infer_broadcast_op(node); break;
         case OP_MUL:        _infer_broadcast_op(node); break;
         case OP_DIV:        _infer_broadcast_op(node); break;
+        case OP_ADD_RELU:   _infer_broadcast_op(node); break;
         case OP_CONV:       _infer_conv(node); break;
         case OP_AVG_POOL:   _infer_pool(node); break;
         case OP_MAX_POOL:   _infer_pool(node); break;
@@ -368,6 +369,7 @@ static void _print_node_attr(FILE *f, struct sf_node *node)
         case OP_SUB:        break;
         case OP_MUL:        break;
         case OP_DIV:        break;
+        case OP_ADD_RELU:   break;
         case OP_CONV: {
             struct sf_conv_attrs *attrs = node->attrs;
             fprintf(f, "layout: %s %s, pads: [%d,%d,%d,%d], stride: [%d,%d], dilate: [%d,%d], relu: %d",

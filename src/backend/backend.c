@@ -120,7 +120,9 @@ static int _gen_const(struct sf_engine *engine, struct sf_node *node)
 {
     int reg = _alloc_reg_unique(engine, node);
     struct sf_const_attrs *attrs = node->attrs;
-    engine->info[reg].data = attrs->data;
+    size_t size = sf_tensor_size(attrs->data_desc);
+    engine->info[reg].data = sf_malloc(engine->alloc, size);
+    memcpy(engine->info[reg].data, attrs->data, size);
     return reg;
 }
 
@@ -219,24 +221,25 @@ static int _gen_add(struct sf_engine *engine, struct sf_node *node)
 }
 
 
-static int _is_gemm_equivalent(struct sf_node *node)
+static int _gen_add_relu(struct sf_engine *engine, struct sf_node *node)
 {
-    struct sf_conv_attrs *attrs = node->attrs;
-    const int *x_shape = node->args[0]->o_desc.shape;
-    const int *w_shape = node->args[1]->o_desc.shape;
+    int x_reg = engine->reg_map[node->args[0]->index];
+    int y_reg = engine->reg_map[node->args[1]->index];
+    int z_reg = -1;
 
-    if (attrs->pad_h0 == 0 && attrs->pad_h1 == 0 && attrs->pad_w0 == 0 && attrs->pad_w1 == 0) {
-        if (w_shape[1] == 1 && w_shape[2] == 1 && attrs->stride_h == 1 && attrs->stride_w == 1) {
-            return 1;
-        }
-        if (w_shape[1] == 1 && w_shape[2] == x_shape[2] && attrs->stride_h == 1) {
-            return 1;
-        }
-        if (w_shape[1] == x_shape[1] && w_shape[2] == x_shape[2]) {
-            return 1;
-        }
+    if (engine->info[x_reg].ref_cnt == 1) {
+        z_reg = x_reg;  // inplace calc
+    } else if (engine->info[y_reg].ref_cnt == 1) {
+        z_reg = y_reg;  // inplace calc
+    } else {
+        z_reg = _alloc_reg_shared(engine, node);
     }
-    return 0;
+    _push_code(engine, (int)VM_ADD_RELU_F32);
+    _push_code(engine, x_reg);
+    _push_code(engine, y_reg);
+    _push_code(engine, z_reg);
+    _push_code(engine, sf_tensor_prod(node->o_desc));
+    return z_reg;
 }
 
 
@@ -251,41 +254,28 @@ static int _gen_conv(struct sf_engine *engine, struct sf_node *node)
     if (node->num_args == 3) {
         b_reg = engine->reg_map[node->args[2]->index];
     }
-    if (strcmp(attrs->x_layout, "NHWC") == 0 && strcmp(attrs->w_layout, "OHWI") == 0) {
-        const int *x_shape = node->args[0]->o_desc.shape;
-        const int *w_shape = node->args[1]->o_desc.shape;
-        const int *y_shape = node->o_desc.shape;
-
-        if (0 && _is_gemm_equivalent(node)) {
-            _push_code(engine, (int)VM_GEMM_F32);
-            _push_code(engine, x_reg);
-            _push_code(engine, w_reg);
-            _push_code(engine, b_reg);
-            _push_code(engine, y_reg);
-            _push_code(engine, 0);
-            _push_code(engine, 1);
-            _push_code(engine, y_shape[0] * y_shape[1] * y_shape[2]);
-            _push_code(engine, w_shape[0]);
-            _push_code(engine, w_shape[1] * w_shape[2] * w_shape[3]);
-            _push_code(engine, attrs->has_relu);
-        } else {
+    if (strcmp(attrs->x_layout, "NHWC") == 0) {
+        if (strcmp(attrs->w_layout, "OHWI") == 0) {
             _push_code(engine, (int)VM_CONV_NHWC_OHWI_F32);
-            _push_code(engine, x_reg);
-            _push_code(engine, w_reg);
-            _push_code(engine, b_reg);
-            _push_code(engine, y_reg);
-
-            int conv_params[] = {
-                attrs->pad_h0, attrs->pad_w0,
-                attrs->stride_h, attrs->stride_w,
-                w_shape[1], w_shape[2],
-                attrs->dilate_h, attrs->dilate_w,
-                attrs->has_relu,
-            };
-            _push_codes(engine, 4, x_shape);
-            _push_codes(engine, 4, y_shape);
-            _push_codes(engine, 9, conv_params);
+        } else {
+            assert(strcmp(attrs->w_layout, "NK16") == 0);
+            _push_code(engine, (int)VM_CONV_NHWC_NK16_F32);
         }
+        _push_code(engine, x_reg);
+        _push_code(engine, w_reg);
+        _push_code(engine, b_reg);
+        _push_code(engine, y_reg);
+
+        int conv_params[] = {
+            attrs->pad_h0, attrs->pad_w0,
+            attrs->stride_h, attrs->stride_w,
+            attrs->kernel_h, attrs->kernel_w,
+            attrs->dilate_h, attrs->dilate_w,
+            attrs->has_relu,
+        };
+        _push_codes(engine, 4, node->args[0]->o_desc.shape);
+        _push_codes(engine, 4, node->o_desc.shape);
+        _push_codes(engine, 9, conv_params);
     }
     else {
         printf("not implemented:\n");
@@ -501,9 +491,10 @@ static void _init_regs(struct sf_engine *engine)
     engine->addr[-1] = NULL;
 
     for (int i=0; i<engine->reg_cnt; i++) {
-        engine->addr[i] = sf_malloc(engine->alloc, engine->info[i].size);
         if (engine->info[i].data != NULL) {
-            memcpy(engine->addr[i], engine->info[i].data, engine->info[i].size);
+            engine->addr[i] = engine->info[i].data;
+        } else {
+            engine->addr[i] = sf_malloc(engine->alloc, engine->info[i].size);
         }
     }
 }
@@ -523,6 +514,7 @@ struct sf_engine *sf_engine_from_graph(struct sf_graph *graph)
             case OP_INPUT:      reg = _gen_input(engine, node); break;
             case OP_CONST:      reg = _gen_const(engine, node); break;
             case OP_ADD:        reg = _gen_add(engine, node); break;
+            case OP_ADD_RELU:   reg = _gen_add_relu(engine, node); break;
             case OP_CONV:       reg = _gen_conv(engine, node); break;
             case OP_MAX_POOL:   reg = _gen_maxpool(engine, node); break;
             case OP_G_AVG_POOL: reg = _gen_gl_avgpool(engine, node); break;
@@ -552,5 +544,31 @@ struct sf_engine *sf_engine_from_graph(struct sf_graph *graph)
     _update_io_info(engine, graph);
     _init_regs(engine);
     return engine;
+}
+
+
+// clone an existing engine (share same data)
+struct sf_engine *sf_clone_engine(struct sf_engine *engine)
+{
+    struct sf_engine *clone = malloc(sizeof(struct sf_engine));
+    memset(clone, 0, sizeof(struct sf_engine));
+
+    clone->alloc = sf_create_allocator();
+    clone->reg_cnt = engine->reg_cnt;
+    clone->reg_len = engine->reg_len;
+    clone->info = engine->info;
+
+    clone->i_cnt = engine->i_cnt;
+    clone->o_cnt = engine->o_cnt;
+    clone->i_names = engine->i_names;
+    clone->i_regs = engine->i_regs;
+    clone->o_regs = engine->o_regs;
+
+    clone->code_cnt = engine->code_cnt;
+    clone->code_len = engine->code_len;
+    clone->vm_code = engine->vm_code;
+
+    _init_regs(clone);
+    return clone;
 }
 

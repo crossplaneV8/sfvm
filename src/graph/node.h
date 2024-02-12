@@ -40,6 +40,7 @@ enum sf_op_type
     OP_SUB,
     OP_MUL,
     OP_DIV,
+    OP_ADD_RELU,
     OP_CONV,
     OP_AVG_POOL,
     OP_MAX_POOL,
@@ -112,7 +113,8 @@ struct sf_conv_attrs {
     int pad_h0, pad_h1, pad_w0, pad_w1;
     int stride_h, stride_w;
     int dilate_h, dilate_w;
-    int has_relu;
+    int kernel_h, kernel_w;
+    int kernel_o, has_relu;
 };
 
 // pooling attributes
@@ -236,11 +238,15 @@ struct sf_node *sf_create_mul_node(struct sf_graph *graph, struct sf_node *x, st
 // create a new divide node
 struct sf_node *sf_create_div_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *y);
 
+// create a new add-relu node
+struct sf_node *sf_create_add_relu_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *y);
+
 // create a new convolution node
 struct sf_node *sf_create_conv_node(struct sf_graph *graph, struct sf_node *x, struct sf_node *w,
                                     struct sf_node *b, const char *x_layout, const char *w_layout,
-                                    int pad_h0, int pad_h1, int pad_w0, int pad_w1, int stride_h,
-                                    int stride_w, int dilate_h, int dilate_w, int has_relu);
+                                    int pad_h0, int pad_h1, int pad_w0, int pad_w1,
+                                    int stride_h, int stride_w, int dilate_h, int dilate_w,
+                                    int kernel_h, int kernel_w, int kernel_o, int has_relu);
 
 // create a new pooling node
 struct sf_node *sf_create_pool_node(struct sf_graph *graph, struct sf_node *x,
