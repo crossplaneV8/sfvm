@@ -46,7 +46,7 @@ static void _infer_input(struct sf_node *node)
     struct sf_input_attrs *attrs = node->attrs;
     if (attrs->data_desc.dtype == SF_UNKNOWN) {
         printf("error: tensor desc of input \"%s\" unspecified\n", attrs->name);
-        abort();
+        assert(0);
     }
     node->o_desc = attrs->data_desc;
 }

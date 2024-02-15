@@ -104,7 +104,7 @@ static void _convert_conv(struct sf_graph *dst, Onnx__GraphProto *src,
 
         if (strcmp(attr->name, "group") == 0) {
             if (attr->has_i && attr->i != 1) {
-                printf("group convolution not implemented!\n"); abort();
+                printf("group convolution not implemented!\n"); assert(0);
             }
         }
         if (strcmp(attr->name, "pads") == 0) {
@@ -228,7 +228,7 @@ static void _convert_pool(struct sf_graph *dst, Onnx__GraphProto *src,
         if (strcmp(attr->name, "dilations") == 0) {
             assert(attr->n_ints == 2);
             if (attr->ints[0] != 1 || attr->ints[1] != 1) {
-                printf("dilated pooling not implemented!\n"); abort();
+                printf("dilated pooling not implemented!\n"); assert(0);
             }
         }
     }
@@ -361,7 +361,7 @@ static void _convert_squeeze(struct sf_graph *dst, Onnx__GraphProto *src,
                 axes[i] = (int)(data[i]);
             }
         } else {
-            printf("squeeze node does not support non-constant axes"); abort();
+            printf("squeeze node does not support non-constant axes"); assert(0);
         }
     }
     sf_create_squeeze_node(dst, args[0], num, axes);
@@ -397,7 +397,7 @@ static void _convert_reshape(struct sf_graph *dst, Onnx__GraphProto *src,
                 shape[i] = (int)(data[i]);
             }
         } else {
-            printf("reshape node does not support non-constant shape"); abort();
+            printf("reshape node does not support non-constant shape"); assert(0);
         }
     }
     sf_create_reshape_node(dst, args[0], num, shape);
@@ -461,7 +461,7 @@ static void _convert_reduce(struct sf_graph *dst, Onnx__GraphProto *src,
                 axes[i] = (int)(data[i]);
             }
         } else {
-            printf("reduce node does not support non-constant axes"); abort();
+            printf("reduce node does not support non-constant axes"); assert(0);
         }
     }
     sf_create_reduce_node(dst, args[0], num_axes, axes, keep_dims, type);
@@ -561,7 +561,7 @@ static void _convert_node(struct sf_graph *dst, Onnx__GraphProto *src,
     }
     else {
         printf("unhandled op: %s\n", node->op_type);
-        abort();
+        assert(0);
     }
 }
 

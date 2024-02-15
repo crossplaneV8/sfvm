@@ -14,7 +14,6 @@
 // register info
 struct sf_reg_info
 {
-    int rank;
     int size;
     int ref_cnt;
     void *data;
@@ -26,18 +25,17 @@ struct sf_engine
 {
     struct sf_allocator *alloc;     // mempool allocator
 
-    int reg_cnt, reg_len;
-    struct sf_reg_info *info;       // list of register info
+    int num_regs;
+    struct sf_reg_info *reg_info;   // list of register infos
     void **addr;                    // list of register addr
-    int *reg_map;                   // node index ==> register
 
-    int i_cnt, o_cnt;
+    int num_code;                   // code length
+    int *vm_code;                   // vm code
+
+    int num_i, num_o;               // num of inputs/outputs
     char **i_names;                 // input names
     int *i_regs;                    // input registers
     int *o_regs;                    // output registers
-
-    int code_cnt, code_len;         // code length
-    int *vm_code;                   // vm code
 };
 
 

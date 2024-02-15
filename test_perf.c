@@ -41,7 +41,6 @@ static void _test_fps_multi_thread(struct sf_engine *engine, int threads)
 }
 
 
-
 int main(void)
 {
     const char *model_path = "./demo/model/resnet18.onnx";

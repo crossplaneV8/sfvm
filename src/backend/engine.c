@@ -5,7 +5,7 @@
 // get input data address by name
 void *sf_get_input_addr(struct sf_engine *engine, const char *name)
 {
-    for (int i=0; i<engine->i_cnt; i++) {
+    for (int i=0; i<engine->num_i; i++) {
         if (strcmp(engine->i_names[i], name) == 0) {
             return engine->addr[engine->i_regs[i]];
         }
@@ -17,10 +17,42 @@ void *sf_get_input_addr(struct sf_engine *engine, const char *name)
 // get output data address by index
 void *sf_get_output_addr(struct sf_engine *engine, int index)
 {
-    if (index >= 0 && index < engine->o_cnt) {
+    if (index >= 0 && index < engine->num_o) {
         return engine->addr[engine->o_regs[index]];
     }
     return NULL;
+}
+
+
+// clone an existing engine (share constant data)
+struct sf_engine *sf_clone_engine(struct sf_engine *engine)
+{
+    struct sf_engine *clone = malloc(sizeof(struct sf_engine));
+    memset(clone, 0, sizeof(struct sf_engine));
+
+    clone->alloc = sf_create_allocator();
+    clone->num_regs = engine->num_regs;
+    clone->reg_info = engine->reg_info;
+
+    clone->addr = sf_malloc(clone->alloc, clone->num_regs * sizeof(void*));
+    for (int i=0; i<clone->num_regs; i++) {
+        if (clone->reg_info[i].data != NULL) {
+            clone->addr[i] = engine->addr[i];
+        } else {
+            clone->addr[i] = sf_malloc(clone->alloc, clone->reg_info[i].size);
+        }
+    }
+
+    clone->num_code = engine->num_code;
+    clone->vm_code = engine->vm_code;
+
+    clone->num_i = engine->num_i;
+    clone->num_o = engine->num_o;
+    clone->i_names = engine->i_names;
+    clone->i_regs = engine->i_regs;
+    clone->o_regs = engine->o_regs;
+
+    return clone;
 }
 
 
@@ -184,7 +216,7 @@ void sf_engine_run(struct sf_engine *engine)
 void sf_print_code(FILE *f, struct sf_engine *engine)
 {
     const int *pc = engine->vm_code;
-    const int *end = pc + engine->code_cnt;
+    const int *end = pc + engine->num_code;
 
     while (pc < end) {
         const char *name = NULL;
