@@ -99,8 +99,8 @@ int main(void)
         // build inference engine
         struct sf_engine *engine = sf_engine_from_graph(graph);
 
-        printf("instructions:\n\n");
-        sf_print_code(stdout, engine);
+        printf("inference engine:\n\n");
+        sf_print_engine(stdout, engine);
 
         printf("image classification test:\n\n");
         _test_image_classification(engine, input_name);

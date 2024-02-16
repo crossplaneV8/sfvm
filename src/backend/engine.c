@@ -212,8 +212,8 @@ void sf_engine_run(struct sf_engine *engine)
 }
 
 
-// print vm code
-void sf_print_code(FILE *f, struct sf_engine *engine)
+// print inference engine
+void sf_print_engine(FILE *f, struct sf_engine *engine)
 {
     const int *pc = engine->vm_code;
     const int *end = pc + engine->num_code;
@@ -246,7 +246,16 @@ void sf_print_code(FILE *f, struct sf_engine *engine)
             fprintf(f, "\n");
         }
     }
-    fprintf(f, "\n");
+    int64_t const_size = 0, reg_size = 0;
+    for (int i=0; i<engine->num_regs; i++) {
+        if (engine->reg_info[i].data != NULL) {
+            const_size += engine->reg_info[i].size;
+        } else {
+            reg_size += engine->reg_info[i].size;
+        }
+    }
+    fprintf(f, "total const size: %.2f MB\n", (double)const_size*1e-6);
+    fprintf(f, "total reg size: %.2f MB\n\n", (double)reg_size*1e-6);
 }
 
 

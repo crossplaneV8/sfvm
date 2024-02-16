@@ -79,8 +79,8 @@ void *sf_get_output_addr(struct sf_engine *engine, int index);
 // execute code on virtual machine
 void sf_engine_run(struct sf_engine *engine);
 
-// print vm code
-void sf_print_code(FILE *f, struct sf_engine *engine);
+// print inference engine
+void sf_print_engine(FILE *f, struct sf_engine *engine);
 
 
 #ifdef __cplusplus

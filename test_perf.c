@@ -67,8 +67,8 @@ int main(void)
         // build inference engine
         struct sf_engine *engine = sf_engine_from_graph(graph);
 
-        printf("instructions:\n\n");
-        sf_print_code(stdout, engine);
+        printf("inference engine:\n\n");
+        sf_print_engine(stdout, engine);
 
         printf("multi thread throughput test:\n\n");
         const int num_threads = 8;

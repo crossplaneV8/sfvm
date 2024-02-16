@@ -325,13 +325,14 @@ static void _imat_to_block(int rows, int cols, int seg, int len,
 }
 
 
-// GEMM kernel
+// GEMM kernel (Y[16, 16] = A[k, 16] * B[k, 16])
 static void _gemm_kernel_16x16(int k, const float *a,
                                const float *b, float *y)
 {
     __m256 K0, K1, X0, X1, Y0, Y1, Y2, Y3, Y4, Y5, Y6, Y7;
+    const int step = 8;
 
-    while (k >= 32) {
+    while (k >= step) {
         for (int j=0; j<4; j++) {
             const float *p = a + j*4, *q = b;
             float *dst = y + j*64;
@@ -345,7 +346,7 @@ static void _gemm_kernel_16x16(int k, const float *a,
             Y6 = _mm256_loadu_ps(dst + 48);
             Y7 = _mm256_loadu_ps(dst + 56);
 
-            for (int i=0; i<32; i++) {
+            for (int i=0; i<step; i++) {
                 X0 = _mm256_loadu_ps(q + 0);
                 X1 = _mm256_loadu_ps(q + 8);
                 K0 = _mm256_broadcast_ss(p + 0);
@@ -371,9 +372,9 @@ static void _gemm_kernel_16x16(int k, const float *a,
             _mm256_storeu_ps(dst + 48, Y6);
             _mm256_storeu_ps(dst + 56, Y7);
         }
-        a += 32 * 16;
-        b += 32 * 16;
-        k -= 32;
+        a += step * 16;
+        b += step * 16;
+        k -= step;
     }
     if (k > 0) {
         for (int j=0; j<4; j++) {

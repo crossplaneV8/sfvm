@@ -160,7 +160,8 @@ static int _alloc_reg(struct sf_builder *builder, size_t size)
 {
     if (builder->num_idle > 0) {
         int reg = builder->idle_list[--(builder->num_idle)];
-        if (size > builder->reg_info[reg].size) {
+        assert(builder->reg_info[reg].ref_cnt == 0);
+        if (builder->reg_info[reg].size < size) {
             builder->reg_info[reg].size = size;
         }
         return reg;

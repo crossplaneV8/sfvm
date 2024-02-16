@@ -59,6 +59,6 @@ gcc -O2 -fopenmp -mavx2 -mfma -Isrc -Isrc/onnx src/base/*.c src/graph/*.c src/on
 CPU: i7-13700F
 | model     | precision | threads | FPS  | TFLOPS |
 | --------- | --------- | ------- | ---- | ------ |
-| ResNet-18 | float32   | 8       | 198  | 0.75   |
+| ResNet-18 | float32   | 8       | 202  | 0.74   |
 | ResNet-50 | float32   | 8       | 79   | 0.62   |
 
