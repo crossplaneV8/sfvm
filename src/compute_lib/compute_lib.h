@@ -19,6 +19,15 @@
 #endif
 
 
+// implicit matrix
+struct vm_imat
+{
+    int rows, cols;
+    int segs, len;
+    float **data;
+};
+
+
 // x[i] = 0
 void vm_clear_f32(float *x, int num);
 
@@ -88,12 +97,12 @@ void vm_gemm_f32(struct sf_allocator *alloc, int trans_a, int trans_b,
 
 // GEMM with implicit matrix A
 void vm_implicit_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
-                          const float **a, int seg, int len, const float *b,
-                          int ldb, float *c, int ldc, const float *bias, int relu);
+                          struct vm_imat *a, const float *b, int ldb,
+                          float *c, int ldc, const float *bias, int relu);
 
 // GEMM with implicit matrix A and NK16-packed matrix B
 void vm_implicit_packed_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
-                                 const float **a, int seg, int len, const float *b,
+                                 struct vm_imat *a, const float *b,
                                  float *c, int ldc, const float *bias, int relu);
 
 // convolution (data: NHWC, weight: OHWI)
@@ -101,7 +110,7 @@ void vm_conv_nhwc_ohwi_f32(struct sf_allocator *alloc, float *x, float *w, float
                            int ni, int hi, int wi, int ci, int no, int ho, int wo, int co,
                            int ph, int pw, int sh, int sw, int kh, int kw, int dh, int dw, int relu);
 
-// convolution (data: NHWC weight: NK16-packed)
+// convolution (data: NHWC, weight: NK16-packed)
 void vm_conv_nhwc_nk16_f32(struct sf_allocator *alloc, float *x, float *w, float *b, float *y,
                            int ni, int hi, int wi, int ci, int no, int ho, int wo, int co,
                            int ph, int pw, int sh, int sw, int kh, int kw, int dh, int dw, int relu);

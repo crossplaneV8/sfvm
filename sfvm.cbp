@@ -21,7 +21,6 @@
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
-					<Add option="-lgomp" />
 				</Linker>
 			</Target>
 		</Build>
@@ -122,6 +121,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/sfvm.h" />
-		<Extensions />
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+		</Extensions>
 	</Project>
 </CodeBlocks_project_file>

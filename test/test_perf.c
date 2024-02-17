@@ -8,7 +8,7 @@ static double _get_time(void)
 {
     struct timezone tz = {0};
 	struct timeval time;
-	gettimeofday( &time, &tz );
+	gettimeofday(&time, &tz);
 	return (double)time.tv_sec + 0.000001*time.tv_usec;
 }
 

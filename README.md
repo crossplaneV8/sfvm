@@ -44,16 +44,15 @@ fold_constant()
 # 运行demo
 ```bash
 cd sfvm
-gcc -O2 -mavx2 -mfma -Isrc -Isrc/onnx src/base/*.c src/graph/*.c src/onnx/*.c src/optimizer/*.c src/backend/*.c src/compute_lib/*.c demo/*.c -o demo -s
+python ./build_demo.py
 ./demo
-```
-也可用CodeBlocks IDE打开工程文件sfvm.cbp编译运行。   
+``` 
 
 
 # 性能测试
 ```bash
 cd sfvm
-gcc -O2 -fopenmp -mavx2 -mfma -Isrc -Isrc/onnx src/base/*.c src/graph/*.c src/onnx/*.c src/optimizer/*.c src/backend/*.c src/compute_lib/*.c test_perf.c -o test -lgomp -s
+python ./build_test.py
 ./test
 ```
 CPU: i7-13700F
