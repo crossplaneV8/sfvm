@@ -28,6 +28,10 @@ struct sf_graph *sf_load_graph_from_onnx(const char *path);
 void sf_set_in_desc(struct sf_graph *graph, const char *name, struct sf_tensor_desc desc);
 
 
+// set node as graph output
+void sf_set_graph_output(struct sf_graph *graph, struct sf_node *node);
+
+
 // infer data type and shape of a node
 void sf_infer_tensor_desc(struct sf_node *node);
 

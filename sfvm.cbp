@@ -21,15 +21,13 @@
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
+					<Add option="-lgomp" />
 				</Linker>
 			</Target>
 		</Build>
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
-		<Unit filename="demo/demo.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="src/backend/backend.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -121,6 +119,19 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/sfvm.h" />
+		<Unit filename="test/test.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test.h" />
+		<Unit filename="test/test_conv.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_perf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_resnet.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Extensions>
 			<code_completion />
 			<envvars />

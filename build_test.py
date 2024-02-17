@@ -27,7 +27,7 @@ _source_files = [
     "src/optimizer/*.c",
     "src/backend/*.c",
     "src/compute_lib/*.c",
-    "test/test_perf.c"
+    "test/*.c"
 ]
 
 

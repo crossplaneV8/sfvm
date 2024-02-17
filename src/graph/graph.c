@@ -41,6 +41,20 @@ void sf_set_in_desc(struct sf_graph *graph, const char *name, struct sf_tensor_d
 }
 
 
+// set node as graph output
+void sf_set_graph_output(struct sf_graph *graph, struct sf_node *node)
+{
+    if (graph != NULL && node != NULL) {
+        if (node->index < graph->nodes->cnt) {
+            if (graph->nodes->buf[node->index] == node) {
+                sf_list_append(graph->outputs, node); return;
+            }
+        }
+    }
+    printf("warning: invalid args in sf_set_graph_output()\n");
+}
+
+
 static void _infer_input(struct sf_node *node)
 {
     struct sf_input_attrs *attrs = node->attrs;

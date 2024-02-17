@@ -618,7 +618,7 @@ struct sf_graph *sf_load_graph_from_onnx(const char *path)
         // gather outputs
         for (int i=0; i<src->n_output; i++) {
             int idx = _find_name(names, src->output[i]->name);
-            sf_list_append(dst->outputs, dst->nodes->buf[idx]);
+            sf_set_graph_output(dst, dst->nodes->buf[idx]);
         }
 
         _discard_onnx_model(model);

@@ -1,9 +1,7 @@
 
-#include <stdio.h>
-#include "sfvm.h"
+#include "test.h"
 
 
-#include <sys/time.h>
 static double _get_time(void)
 {
     struct timezone tz = {0};
@@ -21,8 +19,8 @@ static void _test_fps_multi_thread(struct sf_engine *engine, int threads)
         engine_clones[t] = sf_clone_engine(engine);
     }
 
-    for (int i=0; i<100; i++) {
-        const int num = 40;
+    for (int i=0; i<32; i++) {
+        const int num = 32;
         double t0 = _get_time();
 
         #pragma omp parallel for
@@ -41,37 +39,20 @@ static void _test_fps_multi_thread(struct sf_engine *engine, int threads)
 }
 
 
-int main(void)
+void test_perf(void)
 {
-    const char *model_path = "./demo/model/resnet18.onnx";
+    const char *model_path = "./test/model/resnet18.onnx";
     const char *input_name = "data";
     struct sf_graph *graph = sf_load_graph_from_onnx(model_path);
 
     if (graph != NULL) {
-        // set input tensor dtype and shape
         struct sf_tensor_desc in_desc = {SF_FLOAT32, 4, {1, 3, 224, 224}};
         sf_set_in_desc(graph, input_name, in_desc);
-
-        // inference dtype and shape of other nodes
-        sf_graph_infer_tensor_desc(graph);
-
-        printf("graph before optimization:\n\n");
-        sf_print_graph(stdout, graph);
-
-        // run graph optimization
         sf_run_optimization(graph);
-
-        printf("graph after optimization:\n\n");
-        sf_print_graph(stdout, graph);
-
-        // build inference engine
         struct sf_engine *engine = sf_engine_from_graph(graph);
 
-        printf("inference engine:\n\n");
-        sf_print_engine(stdout, engine);
-
-        printf("multi thread throughput test:\n\n");
-        const int num_threads = 8;
+        int num_threads = omp_get_max_threads();
+        printf("threads = %d\n", num_threads);
         _test_fps_multi_thread(engine, num_threads);
 
         // free memory
@@ -79,9 +60,8 @@ int main(void)
         sf_discard_graph(graph);
     } else {
         printf("error: failed to load model file\n");
+        assert(0);
     }
-    getchar();
-    return 0;
 }
 
 

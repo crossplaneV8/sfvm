@@ -50,16 +50,16 @@ static void _test_image_classification(struct sf_engine *engine, const char *inp
 {
     #include "labels.h"
     const char *test_images[] = {
-        "./demo/image/test_img_0.png",
-        "./demo/image/test_img_1.png",
-        "./demo/image/test_img_2.png",
-        "./demo/image/test_img_3.png",
-        "./demo/image/test_img_4.png",
-        "./demo/image/test_img_5.png",
-        "./demo/image/test_img_6.png",
-        "./demo/image/test_img_7.png",
-        "./demo/image/test_img_8.png",
-        "./demo/image/test_img_9.png",
+        "./test/image/test_img_0.png",
+        "./test/image/test_img_1.png",
+        "./test/image/test_img_2.png",
+        "./test/image/test_img_3.png",
+        "./test/image/test_img_4.png",
+        "./test/image/test_img_5.png",
+        "./test/image/test_img_6.png",
+        "./test/image/test_img_7.png",
+        "./test/image/test_img_8.png",
+        "./test/image/test_img_9.png",
     };
     float *i_data = sf_get_input_addr(engine, input_name);
     float *o_data = sf_get_output_addr(engine, 0);
@@ -75,7 +75,7 @@ static void _test_image_classification(struct sf_engine *engine, const char *inp
 
 int main(void)
 {
-    const char *model_path = "./demo/model/resnet18.onnx";
+    const char *model_path = "./test/model/resnet18.onnx";
     const char *input_name = "data";
     struct sf_graph *graph = sf_load_graph_from_onnx(model_path);
 

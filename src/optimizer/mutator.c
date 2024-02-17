@@ -30,7 +30,7 @@ static void sf_mutator_run(struct sf_mutator *mut)
     // generate new outs from old graph
     for (int i=0; i<old_outs->cnt; i++) {
         struct sf_node *node = sf_mutator_map(mut, old_outs->buf[i]);
-        sf_list_append(mut->graph->outputs, node);
+        sf_set_graph_output(mut->graph, node);
     }
 
     // free memory
@@ -47,7 +47,7 @@ static void sf_mutator_run(struct sf_mutator *mut)
 
 
 // run mutators on graph
-void sf_run_mutators(struct sf_graph *graph, int num, struct sf_mutator muts[])
+static void sf_run_mutators(struct sf_graph *graph, int num, struct sf_mutator muts[])
 {
     struct sf_dict *memo = sf_create_dict();
 
@@ -89,6 +89,7 @@ void sf_run_optimization(struct sf_graph *graph)
         sf_remove_unreachable(),
     };
     int num = sizeof(mutators) / sizeof(mutators[0]);
+    sf_graph_infer_tensor_desc(graph);
     sf_run_mutators(graph, num, mutators);
 }
 
