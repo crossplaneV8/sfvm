@@ -150,14 +150,14 @@ static void _imat_transpose_16x(int len, const float *src[16], float *dst)
             T6 = _mm256_unpackhi_ps(S4, S5);
             T7 = _mm256_unpackhi_ps(S6, S7);
 
-            S0 = _mm256_shuffle_ps(T0, T1, 0x4444);
-            S1 = _mm256_shuffle_ps(T2, T3, 0x4444);
-            S2 = _mm256_shuffle_ps(T4, T5, 0x4444);
-            S3 = _mm256_shuffle_ps(T6, T7, 0x4444);
-            S4 = _mm256_shuffle_ps(T0, T1, 0xeeee);
-            S5 = _mm256_shuffle_ps(T2, T3, 0xeeee);
-            S6 = _mm256_shuffle_ps(T4, T5, 0xeeee);
-            S7 = _mm256_shuffle_ps(T6, T7, 0xeeee);
+            S0 = _mm256_shuffle_ps(T0, T1, 0x44);
+            S1 = _mm256_shuffle_ps(T2, T3, 0x44);
+            S2 = _mm256_shuffle_ps(T4, T5, 0x44);
+            S3 = _mm256_shuffle_ps(T6, T7, 0x44);
+            S4 = _mm256_shuffle_ps(T0, T1, 0xee);
+            S5 = _mm256_shuffle_ps(T2, T3, 0xee);
+            S6 = _mm256_shuffle_ps(T4, T5, 0xee);
+            S7 = _mm256_shuffle_ps(T6, T7, 0xee);
 
             T0 = _mm256_permute2f128_ps(S0, S1, 0x20);
             T1 = _mm256_permute2f128_ps(S4, S5, 0x20);

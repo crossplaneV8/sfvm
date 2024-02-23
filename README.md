@@ -45,15 +45,15 @@ fold_constant()
 ```bash
 cd sfvm
 python ./build_demo.py
-./demo
+./run
 ``` 
 
 
-# 性能测试
+# 运行测试
 ```bash
 cd sfvm
 python ./build_test.py
-./test
+./run
 ```
 CPU: i7-13700F
 | model     | precision | threads | FPS  | TFLOPS |

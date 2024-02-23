@@ -240,7 +240,7 @@ void sf_print_engine(FILE *f, struct sf_engine *engine)
             case VM_GEMM_F32:           name = "VM_GEMM_F32";           regs = 4; args = 6; break;
         }
         if (name != NULL) {
-            fprintf(f, name);
+            fprintf(f, "%s", name);
             for (int i=0; i<regs; i++) {fprintf(f, " R%d,", *pc++);}
             for (int i=0; i<args; i++) {fprintf(f, " %d,", *pc++);}
             fprintf(f, "\n");

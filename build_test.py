@@ -34,7 +34,7 @@ _source_files = [
 if __name__ == "__main__":
 
     command = "gcc"
-    out_file = "test"
+    out_file = "run"
     use_openmp = True
 
     for flag in _compile_flags:
@@ -52,11 +52,14 @@ if __name__ == "__main__":
             command += " " + file
 
     command += " -o " + out_file
+    command += " -lm"
 
     print("command:")
     print(command)
 
-    os.system(command)
-    print("build complete")
+    if os.system(command) == 0:
+        print("build complete")
+    else:
+        print("build failed")
 
 
