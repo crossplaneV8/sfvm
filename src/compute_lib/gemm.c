@@ -2,12 +2,19 @@
 #include "compute_lib.h"
 
 
-// broadcast bias[1, 16] to matrix[16, 16]
-static inline void _broadcast_bias_16x16(const float *bias, float *dst)
-{
-    __m256 R0 = _mm256_loadu_ps(bias + 0);
-    __m256 R1 = _mm256_loadu_ps(bias + 8);
 
+// broadcast bias[x : x+16] to 16x16 matrix
+static inline void _broadcast_bias_16x16(const float *bias, int x, float *dst)
+{
+    __m256 R0, R1;
+
+    if (bias != NULL) {
+        R0 = _mm256_loadu_ps(bias + x + 0);
+        R1 = _mm256_loadu_ps(bias + x + 8);
+    } else {
+        R0 = _mm256_setzero_ps();
+        R1 = _mm256_setzero_ps();
+    }
     for (int i=0; i<4; i++) {
         _mm256_storeu_ps(dst, R0); dst += 8;
         _mm256_storeu_ps(dst, R1); dst += 8;
@@ -224,113 +231,17 @@ static void _mat_to_block(int trans, int rows, int cols,
 }
 
 
-// convert implicit matrix to transposed block
-static void _imat_transpose_16x(int len, const float **src, float *dst)
-{
-    __m256 S0, S1, S2, S3, S4, S5, S6, S7;
-    __m256 T0, T1, T2, T3, T4, T5, T6, T7;
-
-    int i = 0;
-    while (i <= len - 8) {
-        for (int j=0; j<2; j++) {
-            const float **p = src + j*8;
-            float *q = dst + i*16 + j*8;
-
-            S0 = _mm256_loadu_ps(p[0] + i);
-            S1 = _mm256_loadu_ps(p[1] + i);
-            S2 = _mm256_loadu_ps(p[2] + i);
-            S3 = _mm256_loadu_ps(p[3] + i);
-            S4 = _mm256_loadu_ps(p[4] + i);
-            S5 = _mm256_loadu_ps(p[5] + i);
-            S6 = _mm256_loadu_ps(p[6] + i);
-            S7 = _mm256_loadu_ps(p[7] + i);
-
-            T0 = _mm256_unpacklo_ps(S0, S1);
-            T1 = _mm256_unpacklo_ps(S2, S3);
-            T2 = _mm256_unpacklo_ps(S4, S5);
-            T3 = _mm256_unpacklo_ps(S6, S7);
-            T4 = _mm256_unpackhi_ps(S0, S1);
-            T5 = _mm256_unpackhi_ps(S2, S3);
-            T6 = _mm256_unpackhi_ps(S4, S5);
-            T7 = _mm256_unpackhi_ps(S6, S7);
-
-            S0 = _mm256_shuffle_ps(T0, T1, 0x4444);
-            S1 = _mm256_shuffle_ps(T2, T3, 0x4444);
-            S2 = _mm256_shuffle_ps(T4, T5, 0x4444);
-            S3 = _mm256_shuffle_ps(T6, T7, 0x4444);
-            S4 = _mm256_shuffle_ps(T0, T1, 0xeeee);
-            S5 = _mm256_shuffle_ps(T2, T3, 0xeeee);
-            S6 = _mm256_shuffle_ps(T4, T5, 0xeeee);
-            S7 = _mm256_shuffle_ps(T6, T7, 0xeeee);
-
-            T0 = _mm256_permute2f128_ps(S0, S1, 0x20);
-            T1 = _mm256_permute2f128_ps(S4, S5, 0x20);
-            T2 = _mm256_permute2f128_ps(S2, S3, 0x20);
-            T3 = _mm256_permute2f128_ps(S6, S7, 0x20);
-            T4 = _mm256_permute2f128_ps(S0, S1, 0x31);
-            T5 = _mm256_permute2f128_ps(S4, S5, 0x31);
-            T6 = _mm256_permute2f128_ps(S2, S3, 0x31);
-            T7 = _mm256_permute2f128_ps(S6, S7, 0x31);
-
-            _mm256_storeu_ps(q + 0*16, T0);
-            _mm256_storeu_ps(q + 1*16, T1);
-            _mm256_storeu_ps(q + 2*16, T2);
-            _mm256_storeu_ps(q + 3*16, T3);
-            _mm256_storeu_ps(q + 4*16, T4);
-            _mm256_storeu_ps(q + 5*16, T5);
-            _mm256_storeu_ps(q + 6*16, T6);
-            _mm256_storeu_ps(q + 7*16, T7);
-        }
-        i += 8;
-    }
-    if (i < len) {
-        for (int j=0; j<16; j++) {
-            for (int k=i; k<len; k++) {
-                dst[k*16 + j] = src[j][k];
-            }
-        }
-    }
-}
-
-
-// convert imat[y:y+h, :] to NK16-packed layout
-static void _imat_to_block(struct vm_imat *mat, int y, int h, float *dst)
-{
-    const int rows = mat->rows, segs = mat->segs, len = mat->len;
-    const float **data = (void*)(mat->data + y);
-
-    while (h >= 16) {
-        for (int s=0; s<segs; s++) {
-            _imat_transpose_16x(len, data + s*rows, dst);
-            dst += 16 * len;
-        }
-        data += 16;
-        h -= 16;
-    }
-    if (h) {
-        for (int s=0; s<segs; s++) {
-            for (int j=0; j<h; j++) {
-                for (int i=0; i<len; i++) {
-                    dst[i*16 + j] = data[s*rows + j][i];
-                }
-            }
-            dst += 16 * len;
-        }
-    }
-}
-
-
 // GEMM kernel (Y[16, 16] = A[k, 16] * B[k, 16])
 static void _gemm_kernel_16x16(int k, const float *a,
                                const float *b, float *y)
 {
     __m256 K0, K1, X0, X1, Y0, Y1, Y2, Y3, Y4, Y5, Y6, Y7;
-    const int step = 8;
+    const int step = 64;
 
     while (k >= step) {
-        for (int j=0; j<4; j++) {
-            const float *p = a + j*4, *q = b;
-            float *dst = y + j*4*16;
+        for (int j=0; j<16; j+=4) {
+            const float *p = a + j;
+            float *dst = y + j*16;
 
             Y0 = _mm256_loadu_ps(dst + 0*8);
             Y1 = _mm256_loadu_ps(dst + 1*8);
@@ -341,17 +252,17 @@ static void _gemm_kernel_16x16(int k, const float *a,
             Y6 = _mm256_loadu_ps(dst + 6*8);
             Y7 = _mm256_loadu_ps(dst + 7*8);
 
-            for (int i=0; i<step; i++) {
-                X0 = _mm256_loadu_ps(q + i*16 + 0);
-                X1 = _mm256_loadu_ps(q + i*16 + 8);
-                K0 = _mm256_broadcast_ss(p + i*16 + 0);
-                K1 = _mm256_broadcast_ss(p + i*16 + 1);
+            for (int i=0; i<step*16; i+=16) {
+                X0 = _mm256_loadu_ps(b + i + 0);
+                X1 = _mm256_loadu_ps(b + i + 8);
+                K0 = _mm256_broadcast_ss(p + i + 0);
+                K1 = _mm256_broadcast_ss(p + i + 1);
                 Y0 = _mm256_fmadd_ps(K0, X0, Y0);
                 Y1 = _mm256_fmadd_ps(K0, X1, Y1);
                 Y2 = _mm256_fmadd_ps(K1, X0, Y2);
                 Y3 = _mm256_fmadd_ps(K1, X1, Y3);
-                K0 = _mm256_broadcast_ss(p + i*16 + 2);
-                K1 = _mm256_broadcast_ss(p + i*16 + 3);
+                K0 = _mm256_broadcast_ss(p + i + 2);
+                K1 = _mm256_broadcast_ss(p + i + 3);
                 Y4 = _mm256_fmadd_ps(K0, X0, Y4);
                 Y5 = _mm256_fmadd_ps(K0, X1, Y5);
                 Y6 = _mm256_fmadd_ps(K1, X0, Y6);
@@ -371,9 +282,9 @@ static void _gemm_kernel_16x16(int k, const float *a,
         k -= step;
     }
     if (k) {
-        for (int j=0; j<4; j++) {
-            const float *p = a + j*4, *q = b;
-            float *dst = y + j*4*16;
+        for (int j=0; j<16; j+=4) {
+            const float *p = a + j;
+            float *dst = y + j*16;
 
             Y0 = _mm256_loadu_ps(dst + 0*8);
             Y1 = _mm256_loadu_ps(dst + 1*8);
@@ -384,17 +295,17 @@ static void _gemm_kernel_16x16(int k, const float *a,
             Y6 = _mm256_loadu_ps(dst + 6*8);
             Y7 = _mm256_loadu_ps(dst + 7*8);
 
-            for (int i=0; i<k; i++) {
-                X0 = _mm256_loadu_ps(q + i*16 + 0);
-                X1 = _mm256_loadu_ps(q + i*16 + 8);
-                K0 = _mm256_broadcast_ss(p + i*16 + 0);
-                K1 = _mm256_broadcast_ss(p + i*16 + 1);
+            for (int i=0; i<k*16; i+=16) {
+                X0 = _mm256_loadu_ps(b + i + 0);
+                X1 = _mm256_loadu_ps(b + i + 8);
+                K0 = _mm256_broadcast_ss(p + i + 0);
+                K1 = _mm256_broadcast_ss(p + i + 1);
                 Y0 = _mm256_fmadd_ps(K0, X0, Y0);
                 Y1 = _mm256_fmadd_ps(K0, X1, Y1);
                 Y2 = _mm256_fmadd_ps(K1, X0, Y2);
                 Y3 = _mm256_fmadd_ps(K1, X1, Y3);
-                K0 = _mm256_broadcast_ss(p + i*16 + 2);
-                K1 = _mm256_broadcast_ss(p + i*16 + 3);
+                K0 = _mm256_broadcast_ss(p + i + 2);
+                K1 = _mm256_broadcast_ss(p + i + 3);
                 Y4 = _mm256_fmadd_ps(K0, X0, Y4);
                 Y5 = _mm256_fmadd_ps(K0, X1, Y5);
                 Y6 = _mm256_fmadd_ps(K1, X0, Y6);
@@ -413,35 +324,116 @@ static void _gemm_kernel_16x16(int k, const float *a,
 }
 
 
+// GEMM(transA=0, transB=1) for m < 16 case
+static void _plain_gemm_NT_f32(int m, int n, int k,
+                               const float *a, int lda,
+                               const float *b, int ldb,
+                               float *c, int ldc,
+                               const float *bias, int relu)
+{
+    const int mask[16] = {-1, -1, -1, -1, -1, -1, -1, -1,};
+    const int hk = k / 8, rk = k & 7;
+
+    __m256i M = _mm256_loadu_si256((void*)(mask + 8 - rk));
+    __m256 A, B0, B1, B2, B3;
+
+    for (int i=0; i<m; i++) {
+        int j = 0;
+        for (; j<=n-4; j+=4) {
+            const float *pa = a + i*lda;
+            const float *pb = b + j*ldb;
+            __m256 S0 = _mm256_setzero_ps();
+            __m256 S1 = _mm256_setzero_ps();
+            __m256 S2 = _mm256_setzero_ps();
+            __m256 S3 = _mm256_setzero_ps();
+
+            for (int x=0; x<hk; x++) {
+                A = _mm256_loadu_ps(pa);
+                B0 = _mm256_loadu_ps(pb + 0*ldb);
+                B1 = _mm256_loadu_ps(pb + 1*ldb);
+                B2 = _mm256_loadu_ps(pb + 2*ldb);
+                B3 = _mm256_loadu_ps(pb + 3*ldb);
+                S0 = _mm256_fmadd_ps(A, B0, S0);
+                S1 = _mm256_fmadd_ps(A, B1, S1);
+                S2 = _mm256_fmadd_ps(A, B2, S2);
+                S3 = _mm256_fmadd_ps(A, B3, S3);
+                pa += 8; pb += 8;
+            }
+            if (rk) {
+                A = _mm256_maskload_ps(pa, M);
+                B0 = _mm256_maskload_ps(pb + 0*ldb, M);
+                B1 = _mm256_maskload_ps(pb + 1*ldb, M);
+                B2 = _mm256_maskload_ps(pb + 2*ldb, M);
+                B3 = _mm256_maskload_ps(pb + 3*ldb, M);
+                S0 = _mm256_fmadd_ps(A, B0, S0);
+                S1 = _mm256_fmadd_ps(A, B1, S1);
+                S2 = _mm256_fmadd_ps(A, B2, S2);
+                S3 = _mm256_fmadd_ps(A, B3, S3);
+            }
+            float tmp[4][8];
+            _mm256_storeu_ps(tmp[0], S0);
+            _mm256_storeu_ps(tmp[1], S1);
+            _mm256_storeu_ps(tmp[2], S2);
+            _mm256_storeu_ps(tmp[3], S3);
+            for (int x=0; x<4; x++) {
+                c[j + x] = tmp[x][0] + tmp[x][1] + tmp[x][2] + tmp[x][3] +
+                           tmp[x][4] + tmp[x][5] + tmp[x][6] + tmp[x][7];
+            }
+        }
+        for (; j<n; j++) {
+            const float *pa = a + i*lda;
+            const float *pb = b + j*ldb;
+            double sum = 0;
+            for (int x=0; x<k; x++) {
+                sum += pa[x] * pb[x];
+            }
+            c[j] = sum;
+        }
+        if (bias) {
+            if (relu) {
+                vm_add_relu_f32((void*)bias, c, c, n);
+            } else {
+                vm_add_f32((void*)bias, c, c, n);
+            }
+        } else if (relu) {
+            vm_relu_f32(c, c, n);
+        }
+        c += ldc;
+    }
+}
+
+
 // GEMM
 void vm_gemm_f32(struct sf_allocator *alloc, int trans_a, int trans_b,
                  int m, int n, int k, const float *a, int lda, const float *b,
                  int ldb, float *c, int ldc, const float *bias, int relu)
 {
-    const int step = 64;
-    float zeros[16] = {0}, tmp[256] __attribute__((aligned(32)));
-    float *buf_a = sf_malloc(alloc, k * step * sizeof(float));
-    float *buf_b = sf_malloc(alloc, k * ((n+15)&(~15)) * sizeof(float));
-    _mat_to_block(trans_b, k, n, b, ldb, buf_b);
+    if (m < 16 && trans_a == 0 && trans_b == 1) {
+         _plain_gemm_NT_f32(m, n, k, a, lda, b, ldb, c, ldc, bias, relu);
+    } else {
+        const int n16 = (n + 15) & (~15);
+        const int inc_a = trans_a ? 1 : lda;
+        float *pack_b = sf_malloc(alloc, k * n16 * sizeof(float));
+        _mat_to_block(trans_b, k, n, b, ldb, pack_b);
 
-    for (int y=0; y<m; y+=step) {
-        const int h = m - y < step ? m - y : step;
-        _mat_to_block(!trans_a, k, h, a, lda, buf_a);
+#ifdef _OPENMP
+        #pragma omp parallel for
+#endif
+        for (int y=0; y<m; y+=16) {
+            float pack[k * 16] __attribute__((aligned(32)));
+            float tmp[16 * 16] __attribute__((aligned(32)));
+            const int dy = (m - y) < 16 ? (m - y) : 16;
+            _mat_to_block(!trans_a, k, dy, a + y*inc_a, lda, pack);
 
-        for (int j=0; j<n; j+=16) {
-            for (int i=0; i<h; i+=16) {
-                const int dw = n - j < 16 ? n - j : 16;
-                const int dh = h - i < 16 ? h - i : 16;
-                _broadcast_bias_16x16(bias ? bias + j : zeros, tmp);
-                _gemm_kernel_16x16(k, buf_a + i*k, buf_b + j*k, tmp);
-                _copy_mat_relu(dh, dw, tmp, 16, c + i*ldc + j, ldc, relu);
+            for (int x=0; x<n; x+=16) {
+                const int dx = (n - x) < 16 ? (n - x) : 16;
+                _broadcast_bias_16x16(bias, x, tmp);
+                _gemm_kernel_16x16(k, pack, pack_b + x*k, tmp);
+                _copy_mat_relu(dy, dx, tmp, 16, c + y*ldc + x, ldc, relu);
             }
         }
-        a += trans_a ? step : step * lda;
-        c += step * ldc;
+        sf_free(pack_b);
     }
-    sf_free(buf_a);
-    sf_free(buf_b);
 }
 
 
@@ -450,29 +442,27 @@ void vm_implicit_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
                           struct vm_imat *a, const float *b, int ldb,
                           float *c, int ldc, const float *bias, int relu)
 {
-    const int step = 64;
-    float zeros[16] = {0}, tmp[256] __attribute__((aligned(32)));
-    float *buf_a = sf_malloc(alloc, k * step * sizeof(float));
-    float *buf_b = sf_malloc(alloc, k * ((n+15)&(~15)) * sizeof(float));
-    _mat_to_block_T(k, n, b, ldb, buf_b);
+    const int n16 = (n + 15) & (~15);
+    float *pack_b = sf_malloc(alloc, k * n16 * sizeof(float));
+    _mat_to_block_T(k, n, b, ldb, pack_b);
 
-    for (int y=0; y<m; y+=step) {
-        const int h = m - y < step ? m - y : step;
-        _imat_to_block(a, y, h, buf_a);
+#ifdef _OPENMP
+    #pragma omp parallel for
+#endif
+    for (int y=0; y<m; y+=16) {
+        float pack[k * 16] __attribute__((aligned(32)));
+        float tmp[16 * 16] __attribute__((aligned(32)));
+        const int dy = (m - y) < 16 ? (m - y) : 16;
+        vm_pack_imat_16x(a, y, pack);
 
-        for (int j=0; j<n; j+=16) {
-            for (int i=0; i<h; i+=16) {
-                const int dw = n - j < 16 ? n - j : 16;
-                const int dh = h - i < 16 ? h - i : 16;
-                _broadcast_bias_16x16(bias ? bias + j : zeros, tmp);
-                _gemm_kernel_16x16(k, buf_a + i*k, buf_b + j*k, tmp);
-                _copy_mat_relu(dh, dw, tmp, 16, c + i*ldc + j, ldc, relu);
-            }
+        for (int x=0; x<n; x+=16) {
+            const int dx = (n - x) < 16 ? (n - x) : 16;
+            _broadcast_bias_16x16(bias, x, tmp);
+            _gemm_kernel_16x16(k, pack, pack_b + x*k, tmp);
+            _copy_mat_relu(dy, dx, tmp, 16, c + y*ldc + x, ldc, relu);
         }
-        c += step * ldc;
     }
-    sf_free(buf_a);
-    sf_free(buf_b);
+    sf_free(pack_b);
 }
 
 
@@ -481,26 +471,22 @@ void vm_implicit_packed_gemm_f32(struct sf_allocator *alloc, int m, int n, int k
                                  struct vm_imat *a, const float *b,
                                  float *c, int ldc, const float *bias, int relu)
 {
-    const int step = 64;
-    float zeros[16] = {0}, tmp[256] __attribute__((aligned(32)));
-    float *buf_a = sf_malloc(alloc, k * step * sizeof(float));
+#ifdef _OPENMP
+    #pragma omp parallel for
+#endif
+    for (int y=0; y<m; y+=16) {
+        float pack[k * 16] __attribute__((aligned(32)));
+        float tmp[16 * 16] __attribute__((aligned(32)));
+        const int dy = (m - y) < 16 ? (m - y) : 16;
+        vm_pack_imat_16x(a, y, pack);
 
-    for (int y=0; y<m; y+=step) {
-        const int h = m - y < step ? m - y : step;
-        _imat_to_block(a, y, h, buf_a);
-
-        for (int j=0; j<n; j+=16) {
-            for (int i=0; i<h; i+=16) {
-                const int dw = n - j < 16 ? n - j : 16;
-                const int dh = h - i < 16 ? h - i : 16;
-                _broadcast_bias_16x16(bias ? bias + j : zeros, tmp);
-                _gemm_kernel_16x16(k, buf_a + i*k, b + j*k, tmp);
-                _copy_mat_relu(dh, dw, tmp, 16, c + i*ldc + j, ldc, relu);
-            }
+        for (int x=0; x<n; x+=16) {
+            const int dx = (n - x) < 16 ? (n - x) : 16;
+            _broadcast_bias_16x16(bias, x, tmp);
+            _gemm_kernel_16x16(k, pack, b + x*k, tmp);
+            _copy_mat_relu(dy, dx, tmp, 16, c + y*ldc + x, ldc, relu);
         }
-        c += step * ldc;
     }
-    sf_free(buf_a);
 }
 
 

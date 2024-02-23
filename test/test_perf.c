@@ -11,14 +11,31 @@ static double _get_time(void)
 }
 
 
-// multi thread throughput test
-static void _test_fps_multi_thread(struct sf_engine *engine, int threads)
+// single engine throughput test
+static void _test_fps_single_engine(struct sf_engine *engine)
+{
+    printf("single engine:\n");
+    for (int i=0; i<32; i++) {
+        const int num = 64;
+        double t0 = _get_time();
+        for (int j=0; j<num; j++) {
+            sf_engine_run(engine);
+        }
+        double t1 = _get_time();
+        printf("%.2f FPS\n", num/(t1-t0));
+    }
+}
+
+
+// multi engine throughput test
+static void _test_fps_multi_engine(struct sf_engine *engine, int threads)
 {
     struct sf_engine *engine_clones[threads];
     for (int t=0; t<threads; t++) {
         engine_clones[t] = sf_clone_engine(engine);
     }
 
+    printf("%d parallel engines:\n", threads);
     for (int i=0; i<32; i++) {
         const int num = 32;
         double t0 = _get_time();
@@ -30,7 +47,7 @@ static void _test_fps_multi_thread(struct sf_engine *engine, int threads)
             }
         }
         double t1 = _get_time();
-        printf("total: %.2f FPS\n", (threads*num)/(t1-t0));
+        printf("%.2f FPS\n", (threads*num)/(t1-t0));
     }
 
     for (int t=0; t<threads; t++) {
@@ -52,8 +69,8 @@ void test_perf(void)
         struct sf_engine *engine = sf_engine_from_graph(graph);
 
         int num_threads = omp_get_max_threads();
-        printf("threads = %d\n", num_threads);
-        _test_fps_multi_thread(engine, num_threads);
+        _test_fps_single_engine(engine);
+        _test_fps_multi_engine(engine, num_threads);
 
         // free memory
         sf_discard_engine(engine);

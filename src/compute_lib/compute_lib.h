@@ -18,14 +18,31 @@
 #include <x86intrin.h>
 #endif
 
+#pragma GCC optimize("unroll-loops")
+
 
 // implicit matrix
 struct vm_imat
 {
     int rows, cols;
     int segs, len;
-    float **data;
+
+    int hi, wi;
+    int ho, wo;
+    int ci, co;
+    int ph, pw;
+    int sh, sw;
+    int kh, kw;
+    int dh, dw;
+
+    float *temp;
+    float *pads;
+    float *data;
 };
+
+
+// slice imat[y:y+16, 0:k], transpose to [k, 16]
+void vm_pack_imat_16x(struct vm_imat *mat, int y, float *dst);
 
 
 // x[i] = 0

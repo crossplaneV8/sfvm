@@ -3,134 +3,6 @@
 
 
 
-// generate implicit matrix (padding > 0 or dilation > 1)
-static struct vm_imat *_gen_imat_0(struct sf_allocator *alloc, float *data,
-                                   int ni, int hi, int wi, int ci,
-                                   int no, int ho, int wo, int co,
-                                   int ph, int pw, int sh, int sw,
-                                   int kh, int kw, int dh, int dw)
-{
-    struct vm_imat *mat = sf_malloc(alloc, sizeof(struct vm_imat));
-    memset(mat, 0, sizeof(struct vm_imat));
-    mat->rows = ni * ho * wo;
-    mat->cols = kh * kw * ci;
-    mat->segs = kh * kw;
-    mat->len = ci;
-
-    size_t size = (mat->segs * mat->rows * sizeof(float*) + 31) & (~31);
-    float **idx = sf_malloc(alloc, size + ci * sizeof(float));
-    float *pad = (float*)((uint8_t*)idx + size);
-    vm_clear_f32(pad, ci);
-    mat->data = idx;
-
-    const int wc = wi*ci, hwc = hi*wi*ci;
-
-    for (int ii=0; ii<kh; ii++) {
-        for (int jj=0; jj<kw; jj++) {
-            for (int n=0; n<ni; n++) {
-                for (int i=0; i<ho; i++) {
-                    for (int j=0; j<wo; j++) {
-                        int y = i*sh + ii*dh - ph;
-                        int x = j*sw + jj*dw - pw;
-                        int fy = (y >= 0) & (y < hi);
-                        int fx = (x >= 0) & (x < wi);
-                        *idx++ = (fy & fx) ? (data + n*hwc + y*wc + x*ci) : pad;
-                    }
-                }
-            }
-        }
-    }
-    return mat;
-}
-
-
-// generate implicit matrix (padding = 0 and dilation = 1)
-static struct vm_imat *_gen_imat_1(struct sf_allocator *alloc, float *data,
-                                   int ni, int hi, int wi, int ci,
-                                   int no, int ho, int wo, int co,
-                                   int kh, int kw, int sh, int sw)
-{
-    struct vm_imat *mat = sf_malloc(alloc, sizeof(struct vm_imat));
-    memset(mat, 0, sizeof(struct vm_imat));
-    mat->rows = ni * ho * wo;
-    mat->cols = kh * kw * ci;
-    mat->segs = kh;
-    mat->len = kw * ci;
-    mat->data = sf_malloc(alloc, mat->segs * mat->rows * sizeof(float*));
-
-    const int wc = wi*ci, hwc = hi*wi*ci;
-    float **idx = mat->data;
-
-    for (int k=0; k<kh; k++) {
-        for (int n=0; n<ni; n++) {
-            for (int i=0; i<ho; i++) {
-                for (int j=0; j<wo; j++) {
-                    *idx++ = data + n*hwc + i*sh*wc + j*sw*ci + k*wc;
-                }
-            }
-        }
-    }
-    return mat;
-}
-
-
-// generate implicit matrix (kernel_w = input_w and padding = 0)
-static struct vm_imat *_gen_imat_2(struct sf_allocator *alloc, float *data,
-                                   int ni, int hi, int wi, int ci,
-                                   int no, int ho, int wo, int co,
-                                   int kh, int kw, int sh, int sw)
-{
-    struct vm_imat *mat = sf_malloc(alloc, sizeof(struct vm_imat));
-    memset(mat, 0, sizeof(struct vm_imat));
-    mat->rows = ni * ho * wo;
-    mat->cols = kh * kw * ci;
-    mat->segs = 1;
-    mat->len = kh * kw * ci;
-    mat->data = sf_malloc(alloc, mat->segs * mat->rows * sizeof(float*));
-
-    const int hwc = hi*wi*ci, step = sh*wi*ci;
-    float **idx = mat->data;
-
-    for (int n=0; n<ni; n++) {
-        for (int i=0; i<ho; i++) {
-            *idx++ = data + n*hwc + i*step;
-        }
-    }
-    return mat;
-}
-
-
-// generate implicit matrix
-static struct vm_imat *_gen_imat(struct sf_allocator *alloc, float *data,
-                                 int ni, int hi, int wi, int ci,
-                                 int no, int ho, int wo, int co,
-                                 int ph, int pw, int sh, int sw,
-                                 int kh, int kw, int dh, int dw)
-{
-    if (ph == 0 && pw == 0 && dh == 1 && dw == 1) {
-        if (kw == wi) {
-            return _gen_imat_2(alloc, data, ni, hi, wi, ci, no, ho, wo, co, kh, kw, sh, sw);
-        } else {
-            return _gen_imat_1(alloc, data, ni, hi, wi, ci, no, ho, wo, co, kh, kw, sh, sw);
-        }
-    } else {
-        return _gen_imat_0(alloc, data, ni, hi, wi, ci, no, ho, wo, co, ph, pw, sh, sw, kh, kw, dh, dw);
-    }
-}
-
-
-// free memory of implicit matrix
-static void _discard_imat(struct vm_imat *mat)
-{
-    if (mat != NULL) {
-        if (mat->data != NULL) {
-            sf_free(mat->data);
-        }
-        sf_free(mat);
-    }
-}
-
-
 // separate zero padding from small channel convolution
 static float *_zero_pad(struct sf_allocator *alloc, int n, int h0, int w0,
                         int c, int ph, int pw, int h1, int w1, float *src)
@@ -151,27 +23,195 @@ static float *_zero_pad(struct sf_allocator *alloc, int n, int h0, int w0,
 }
 
 
+// generate implicit matrix
+static struct vm_imat *_gen_imat(struct sf_allocator *alloc, float *data,
+                                 int ni, int hi, int wi, int ci,
+                                 int no, int ho, int wo, int co,
+                                 int ph, int pw, int sh, int sw,
+                                 int kh, int kw, int dh, int dw)
+{
+    struct vm_imat *mat = sf_malloc(alloc, sizeof(struct vm_imat));
+    memset(mat, 0, sizeof(struct vm_imat));
+
+    if ((ph > 0 || pw > 0) && dh == 1 && dw == 1 && ci < 8) {
+        const int h1 = kh + (ho - 1) * sh;
+        const int w1 = kw + (wo - 1) * sw;
+        data = _zero_pad(alloc, ni, hi, wi, ci, ph, pw, h1, w1, data);
+        mat->temp = data;
+        hi = h1; ph = 0;
+        wi = w1; pw = 0;
+    }
+    if (ph == 0 && pw == 0 && dh == 1 && dw == 1) {
+        mat->segs = kh;
+        mat->len = kw * ci;
+    } else {
+        mat->segs = kh * kw;
+        mat->len = ci;
+    }
+    mat->rows = no * ho * wo;
+    mat->cols = kh * kw * ci;
+    mat->hi = hi; mat->wi = wi;
+    mat->ho = ho; mat->wo = wo;
+    mat->ci = ci; mat->co = co;
+    mat->ph = ph; mat->pw = pw;
+    mat->sh = sh; mat->sw = sw;
+    mat->kh = kh; mat->kw = kw;
+    mat->dh = dh; mat->dw = dw;
+
+    mat->pads = sf_malloc(alloc, mat->len * sizeof(float));
+    vm_clear_f32(mat->pads, mat->len);
+    mat->data = data;
+
+    return mat;
+}
+
+
+// free memory of implicit matrix
+static void _discard_imat(struct vm_imat *mat)
+{
+    if (mat != NULL) {
+        if (mat->temp != NULL) {
+            sf_free(mat->temp);
+        }
+        if (mat->pads != NULL) {
+            sf_free(mat->pads);
+        }
+        sf_free(mat);
+    }
+}
+
+
+// get data index of 16 rows in the implicit matrix
+static void _get_imat_rows_16x(struct vm_imat *mat, int begin, const float *idx[][16])
+{
+    const int hi = mat->hi, wi = mat->wi;
+    const int ph = mat->ph, pw = mat->pw;
+    const int sh = mat->sh, sw = mat->sw;
+    const int kh = mat->kh, kw = mat->kw;
+    const int dh = mat->dh, dw = mat->dw;
+    const int ostep1 = mat->wo;
+    const int ostep2 = mat->ho * ostep1;
+    const int istep0 = mat->ci;
+    const int istep1 = mat->wi * istep0;
+    const int istep2 = mat->hi * istep1;
+    const int segs = mat->segs;
+    int dy[segs], dx[segs];
+
+    for (int i=0; i<segs; i++) {
+        const int s = i * (kh * kw / segs);
+        const int ky = s/kw, kx = s - ky*kw;
+        dy[i] = ky*dh - ph; dx[i] = kx*dw - pw;
+    }
+    for (int i=0; i<16; i++) {
+        const int s = begin + i;
+        for (int j=0; j<segs; j++) {
+            idx[j][i] = mat->pads;
+        }
+        if ((unsigned)s < (unsigned)(mat->rows)) {
+            const int n = s/ostep2, r = s - n*ostep2;
+            const int h = r/ostep1, w = r - h*ostep1;
+            for (int j=0; j<segs; j++) {
+                const int y = h*sh + dy[j], x = w*sw + dx[j];
+                if ((unsigned)y < (unsigned)hi && (unsigned)x < (unsigned)wi) {
+                    idx[j][i] = mat->data + n*istep2 + y*istep1 + x*istep0;
+                }
+            }
+        }
+    }
+}
+
+
+// convert implicit matrix to transposed block
+static void _imat_transpose_16x(int len, const float *src[16], float *dst)
+{
+    __m256 S0, S1, S2, S3, S4, S5, S6, S7;
+    __m256 T0, T1, T2, T3, T4, T5, T6, T7;
+
+    int i = 0;
+    while (i <= len - 8) {
+        for (int j=0; j<16; j+=8) {
+            float *q = dst + i*16 + j;
+
+            S0 = _mm256_loadu_ps(src[j + 0] + i);
+            S1 = _mm256_loadu_ps(src[j + 1] + i);
+            S2 = _mm256_loadu_ps(src[j + 2] + i);
+            S3 = _mm256_loadu_ps(src[j + 3] + i);
+            S4 = _mm256_loadu_ps(src[j + 4] + i);
+            S5 = _mm256_loadu_ps(src[j + 5] + i);
+            S6 = _mm256_loadu_ps(src[j + 6] + i);
+            S7 = _mm256_loadu_ps(src[j + 7] + i);
+
+            T0 = _mm256_unpacklo_ps(S0, S1);
+            T1 = _mm256_unpacklo_ps(S2, S3);
+            T2 = _mm256_unpacklo_ps(S4, S5);
+            T3 = _mm256_unpacklo_ps(S6, S7);
+            T4 = _mm256_unpackhi_ps(S0, S1);
+            T5 = _mm256_unpackhi_ps(S2, S3);
+            T6 = _mm256_unpackhi_ps(S4, S5);
+            T7 = _mm256_unpackhi_ps(S6, S7);
+
+            S0 = _mm256_shuffle_ps(T0, T1, 0x4444);
+            S1 = _mm256_shuffle_ps(T2, T3, 0x4444);
+            S2 = _mm256_shuffle_ps(T4, T5, 0x4444);
+            S3 = _mm256_shuffle_ps(T6, T7, 0x4444);
+            S4 = _mm256_shuffle_ps(T0, T1, 0xeeee);
+            S5 = _mm256_shuffle_ps(T2, T3, 0xeeee);
+            S6 = _mm256_shuffle_ps(T4, T5, 0xeeee);
+            S7 = _mm256_shuffle_ps(T6, T7, 0xeeee);
+
+            T0 = _mm256_permute2f128_ps(S0, S1, 0x20);
+            T1 = _mm256_permute2f128_ps(S4, S5, 0x20);
+            T2 = _mm256_permute2f128_ps(S2, S3, 0x20);
+            T3 = _mm256_permute2f128_ps(S6, S7, 0x20);
+            T4 = _mm256_permute2f128_ps(S0, S1, 0x31);
+            T5 = _mm256_permute2f128_ps(S4, S5, 0x31);
+            T6 = _mm256_permute2f128_ps(S2, S3, 0x31);
+            T7 = _mm256_permute2f128_ps(S6, S7, 0x31);
+
+            _mm256_storeu_ps(q + 0*16, T0);
+            _mm256_storeu_ps(q + 1*16, T1);
+            _mm256_storeu_ps(q + 2*16, T2);
+            _mm256_storeu_ps(q + 3*16, T3);
+            _mm256_storeu_ps(q + 4*16, T4);
+            _mm256_storeu_ps(q + 5*16, T5);
+            _mm256_storeu_ps(q + 6*16, T6);
+            _mm256_storeu_ps(q + 7*16, T7);
+        }
+        i += 8;
+    }
+    if (i < len) {
+        for (int j=0; j<16; j++) {
+            for (int k=i; k<len; k++) {
+                dst[k*16 + j] = src[j][k];
+            }
+        }
+    }
+}
+
+
+// slice imat[y:y+16, 0:k], transpose to [k, 16]
+void vm_pack_imat_16x(struct vm_imat *mat, int y, float *dst)
+{
+    const int segs = mat->segs, len = mat->len;
+    const float *data[segs][16];
+    _get_imat_rows_16x(mat, y, data);
+
+    for (int s=0; s<segs; s++) {
+        _imat_transpose_16x(len, data[s], dst);
+        dst += 16 * len;
+    }
+}
+
+
 // convolution (data: NHWC, weight: OHWI)
 void vm_conv_nhwc_ohwi_f32(struct sf_allocator *alloc, float *x, float *w, float *b, float *y,
                            int ni, int hi, int wi, int ci, int no, int ho, int wo, int co,
                            int ph, int pw, int sh, int sw, int kh, int kw, int dh, int dw, int relu)
 {
-    if ((ph > 0 || pw > 0) && ci < 8 && dh == 1 && dw == 1) {
-        const int h1 = kh + (ho - 1) * sh;
-        const int w1 = kw + (wo - 1) * sw;
-        float *x_pad = _zero_pad(alloc, ni, hi, wi, ci, ph, pw, h1, w1, x);
-        struct vm_imat *mat = _gen_imat(alloc, x_pad, ni, h1, w1, ci, no, ho,
-                                        wo, co, 0, 0, sh, sw, kh, kw, dh, dw);
-        vm_implicit_gemm_f32(alloc, mat->rows, co, mat->cols, mat, w, mat->cols, y, co, b, relu);
-        _discard_imat(mat);
-        sf_free(x_pad);
-    }
-    else {
-        struct vm_imat *mat = _gen_imat(alloc, x, ni, hi, wi, ci, no, ho, wo,
-                                        co, ph, pw, sh, sw, kh, kw, dh, dw);
-        vm_implicit_gemm_f32(alloc, mat->rows, co, mat->cols, mat, w, mat->cols, y, co, b, relu);
-        _discard_imat(mat);
-    }
+    struct vm_imat *mat = _gen_imat(alloc, x, ni, hi, wi, ci, no, ho, wo,
+                                    co, ph, pw, sh, sw, kh, kw, dh, dw);
+    vm_implicit_gemm_f32(alloc, mat->rows, co, mat->cols, mat, w, mat->cols, y, co, b, relu);
+    _discard_imat(mat);
 }
 
 
@@ -180,22 +220,10 @@ void vm_conv_nhwc_nk16_f32(struct sf_allocator *alloc, float *x, float *w, float
                            int ni, int hi, int wi, int ci, int no, int ho, int wo, int co,
                            int ph, int pw, int sh, int sw, int kh, int kw, int dh, int dw, int relu)
 {
-    if ((ph > 0 || pw > 0) && ci < 8 && dh == 1 && dw == 1) {
-        const int h1 = kh + (ho - 1) * sh;
-        const int w1 = kw + (wo - 1) * sw;
-        float *x_pad = _zero_pad(alloc, ni, hi, wi, ci, ph, pw, h1, w1, x);
-        struct vm_imat *mat = _gen_imat(alloc, x_pad, ni, h1, w1, ci, no, ho,
-                                        wo, co, 0, 0, sh, sw, kh, kw, dh, dw);
-        vm_implicit_packed_gemm_f32(alloc, mat->rows, co, mat->cols, mat, w, y, co, b, relu);
-        _discard_imat(mat);
-        sf_free(x_pad);
-    }
-    else {
-        struct vm_imat *mat = _gen_imat(alloc, x, ni, hi, wi, ci, no, ho, wo,
-                                        co, ph, pw, sh, sw, kh, kw, dh, dw);
-        vm_implicit_packed_gemm_f32(alloc, mat->rows, co, mat->cols, mat, w, y, co, b, relu);
-        _discard_imat(mat);
-    }
+    struct vm_imat *mat = _gen_imat(alloc, x, ni, hi, wi, ci, no, ho, wo,
+                                    co, ph, pw, sh, sw, kh, kw, dh, dw);
+    vm_implicit_packed_gemm_f32(alloc, mat->rows, co, mat->cols, mat, w, y, co, b, relu);
+    _discard_imat(mat);
 }
 
 
