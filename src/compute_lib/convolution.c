@@ -81,8 +81,8 @@ static void _discard_imat(struct vm_imat *mat)
 }
 
 
-// get data index of 16 rows in the implicit matrix
-static void _get_imat_rows_16x(struct vm_imat *mat, int begin, const float *idx[][16])
+// get data index of rows in the implicit matrix
+static void _get_imat_rows(struct vm_imat *mat, const float *idx[], int begin, int rows)
 {
     const int hi = mat->hi, wi = mat->wi;
     const int ph = mat->ph, pw = mat->pw;
@@ -102,10 +102,10 @@ static void _get_imat_rows_16x(struct vm_imat *mat, int begin, const float *idx[
         const int ky = s/kw, kx = s - ky*kw;
         dy[i] = ky*dh - ph; dx[i] = kx*dw - pw;
     }
-    for (int i=0; i<16; i++) {
+    for (int i=0; i<rows; i++) {
         const int s = begin + i;
         for (int j=0; j<segs; j++) {
-            idx[j][i] = mat->pads;
+            idx[j*rows + i] = mat->pads;
         }
         if ((unsigned)s < (unsigned)(mat->rows)) {
             const int n = s/ostep2, r = s - n*ostep2;
@@ -113,7 +113,7 @@ static void _get_imat_rows_16x(struct vm_imat *mat, int begin, const float *idx[
             for (int j=0; j<segs; j++) {
                 const int y = h*sh + dy[j], x = w*sw + dx[j];
                 if ((unsigned)y < (unsigned)hi && (unsigned)x < (unsigned)wi) {
-                    idx[j][i] = mat->data + n*istep2 + y*istep1 + x*istep0;
+                    idx[j*rows + i] = mat->data + n*istep2 + y*istep1 + x*istep0;
                 }
             }
         }
@@ -121,68 +121,67 @@ static void _get_imat_rows_16x(struct vm_imat *mat, int begin, const float *idx[
 }
 
 
-// convert implicit matrix to transposed block
-static void _imat_transpose_16x(int len, const float *src[16], float *dst)
+static void _transpose_16x(int len, const float *src[16], float *dst)
 {
-    __m256 S0, S1, S2, S3, S4, S5, S6, S7;
-    __m256 T0, T1, T2, T3, T4, T5, T6, T7;
+    if (len >= 8) {
+        __m256 S0, S1, S2, S3, S4, S5, S6, S7;
+        __m256 T0, T1, T2, T3, T4, T5, T6, T7;
 
-    int i = 0;
-    while (i <= len - 8) {
-        for (int j=0; j<16; j+=8) {
-            float *q = dst + i*16 + j;
+        for (int i=0; i<len; i+=8) {
+            int k = i < (len - 8) ? i : (len - 8);
+            for (int j=0; j<16; j+=8) {
+                float *q = dst + k*16 + j;
 
-            S0 = _mm256_loadu_ps(src[j + 0] + i);
-            S1 = _mm256_loadu_ps(src[j + 1] + i);
-            S2 = _mm256_loadu_ps(src[j + 2] + i);
-            S3 = _mm256_loadu_ps(src[j + 3] + i);
-            S4 = _mm256_loadu_ps(src[j + 4] + i);
-            S5 = _mm256_loadu_ps(src[j + 5] + i);
-            S6 = _mm256_loadu_ps(src[j + 6] + i);
-            S7 = _mm256_loadu_ps(src[j + 7] + i);
+                S0 = _mm256_loadu_ps(src[j + 0] + k);
+                S1 = _mm256_loadu_ps(src[j + 1] + k);
+                S2 = _mm256_loadu_ps(src[j + 2] + k);
+                S3 = _mm256_loadu_ps(src[j + 3] + k);
+                S4 = _mm256_loadu_ps(src[j + 4] + k);
+                S5 = _mm256_loadu_ps(src[j + 5] + k);
+                S6 = _mm256_loadu_ps(src[j + 6] + k);
+                S7 = _mm256_loadu_ps(src[j + 7] + k);
 
-            T0 = _mm256_unpacklo_ps(S0, S1);
-            T1 = _mm256_unpacklo_ps(S2, S3);
-            T2 = _mm256_unpacklo_ps(S4, S5);
-            T3 = _mm256_unpacklo_ps(S6, S7);
-            T4 = _mm256_unpackhi_ps(S0, S1);
-            T5 = _mm256_unpackhi_ps(S2, S3);
-            T6 = _mm256_unpackhi_ps(S4, S5);
-            T7 = _mm256_unpackhi_ps(S6, S7);
+                T0 = _mm256_unpacklo_ps(S0, S1);
+                T1 = _mm256_unpacklo_ps(S2, S3);
+                T2 = _mm256_unpacklo_ps(S4, S5);
+                T3 = _mm256_unpacklo_ps(S6, S7);
+                T4 = _mm256_unpackhi_ps(S0, S1);
+                T5 = _mm256_unpackhi_ps(S2, S3);
+                T6 = _mm256_unpackhi_ps(S4, S5);
+                T7 = _mm256_unpackhi_ps(S6, S7);
 
-            S0 = _mm256_shuffle_ps(T0, T1, 0x44);
-            S1 = _mm256_shuffle_ps(T2, T3, 0x44);
-            S2 = _mm256_shuffle_ps(T4, T5, 0x44);
-            S3 = _mm256_shuffle_ps(T6, T7, 0x44);
-            S4 = _mm256_shuffle_ps(T0, T1, 0xee);
-            S5 = _mm256_shuffle_ps(T2, T3, 0xee);
-            S6 = _mm256_shuffle_ps(T4, T5, 0xee);
-            S7 = _mm256_shuffle_ps(T6, T7, 0xee);
+                S0 = _mm256_shuffle_ps(T0, T1, 0x44);
+                S1 = _mm256_shuffle_ps(T2, T3, 0x44);
+                S2 = _mm256_shuffle_ps(T4, T5, 0x44);
+                S3 = _mm256_shuffle_ps(T6, T7, 0x44);
+                S4 = _mm256_shuffle_ps(T0, T1, 0xee);
+                S5 = _mm256_shuffle_ps(T2, T3, 0xee);
+                S6 = _mm256_shuffle_ps(T4, T5, 0xee);
+                S7 = _mm256_shuffle_ps(T6, T7, 0xee);
 
-            T0 = _mm256_permute2f128_ps(S0, S1, 0x20);
-            T1 = _mm256_permute2f128_ps(S4, S5, 0x20);
-            T2 = _mm256_permute2f128_ps(S2, S3, 0x20);
-            T3 = _mm256_permute2f128_ps(S6, S7, 0x20);
-            T4 = _mm256_permute2f128_ps(S0, S1, 0x31);
-            T5 = _mm256_permute2f128_ps(S4, S5, 0x31);
-            T6 = _mm256_permute2f128_ps(S2, S3, 0x31);
-            T7 = _mm256_permute2f128_ps(S6, S7, 0x31);
+                T0 = _mm256_permute2f128_ps(S0, S1, 0x20);
+                T1 = _mm256_permute2f128_ps(S4, S5, 0x20);
+                T2 = _mm256_permute2f128_ps(S2, S3, 0x20);
+                T3 = _mm256_permute2f128_ps(S6, S7, 0x20);
+                T4 = _mm256_permute2f128_ps(S0, S1, 0x31);
+                T5 = _mm256_permute2f128_ps(S4, S5, 0x31);
+                T6 = _mm256_permute2f128_ps(S2, S3, 0x31);
+                T7 = _mm256_permute2f128_ps(S6, S7, 0x31);
 
-            _mm256_storeu_ps(q + 0*16, T0);
-            _mm256_storeu_ps(q + 1*16, T1);
-            _mm256_storeu_ps(q + 2*16, T2);
-            _mm256_storeu_ps(q + 3*16, T3);
-            _mm256_storeu_ps(q + 4*16, T4);
-            _mm256_storeu_ps(q + 5*16, T5);
-            _mm256_storeu_ps(q + 6*16, T6);
-            _mm256_storeu_ps(q + 7*16, T7);
+                _mm256_storeu_ps(q + 0*16, T0);
+                _mm256_storeu_ps(q + 1*16, T1);
+                _mm256_storeu_ps(q + 2*16, T2);
+                _mm256_storeu_ps(q + 3*16, T3);
+                _mm256_storeu_ps(q + 4*16, T4);
+                _mm256_storeu_ps(q + 5*16, T5);
+                _mm256_storeu_ps(q + 6*16, T6);
+                _mm256_storeu_ps(q + 7*16, T7);
+            }
         }
-        i += 8;
-    }
-    if (i < len) {
-        for (int j=0; j<16; j++) {
-            for (int k=i; k<len; k++) {
-                dst[k*16 + j] = src[j][k];
+    } else {
+        for (int i=0; i<16; i++) {
+            for (int j=0; j<len; j++) {
+                dst[j*16 + i] = src[i][j];
             }
         }
     }
@@ -194,11 +193,11 @@ void vm_pack_imat_16x(struct vm_imat *mat, int y, float *dst)
 {
     const int segs = mat->segs, len = mat->len;
     const float *data[segs][16];
-    _get_imat_rows_16x(mat, y, data);
+    _get_imat_rows(mat, (void*)data, y, 16);
 
     for (int s=0; s<segs; s++) {
-        _imat_transpose_16x(len, data[s], dst);
-        dst += 16 * len;
+        _transpose_16x(len, data[s], dst);
+        dst += len * 16;
     }
 }
 

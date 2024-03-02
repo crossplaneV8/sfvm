@@ -56,8 +56,8 @@ python ./build_test.py
 ./run
 ```
 CPU: i7-13700F
-| model     | precision | threads | FPS  | TFLOPS |
-| --------- | --------- | ------- | ---- | ------ |
-| ResNet-18 | float32   | 8       | 202  | 0.74   |
-| ResNet-50 | float32   | 8       | 79   | 0.62   |
+| model     | precision | FPS  | TFLOPS |
+| --------- | --------- | ---- | ------ |
+| ResNet-18 | float32   | 215  | 0.77   |
+| ResNet-50 | float32   | 85   | 0.66   |
 
