@@ -39,7 +39,7 @@ static struct sf_node *_visit(struct sf_mutator *mut, struct sf_node *node, stru
     }
 
     // add(x, 0) ==> x
-    if (node->op_type == OP_ADD || node->op_type == OP_SUB) {
+    if (node->op_type == OP_ADD) {
         if (_same_shape(new_args[1], node) && _all_equals(new_args[0], 0)) {
             return new_args[1];
         }
@@ -49,7 +49,7 @@ static struct sf_node *_visit(struct sf_mutator *mut, struct sf_node *node, stru
     }
 
     // mul(x, 1) ==> x
-    if (node->op_type == OP_MUL || node->op_type == OP_DIV) {
+    if (node->op_type == OP_MUL) {
         if (_same_shape(new_args[1], node) && _all_equals(new_args[0], 1)) {
             return new_args[1];
         }
