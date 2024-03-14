@@ -12,46 +12,18 @@ static double _get_time(void)
 
 
 // single engine throughput test
-static void _test_fps_single_engine(struct sf_engine *engine)
+static void _test_fps(struct sf_engine *engine, int batch)
 {
-    printf("single engine:\n");
-    for (int i=0; i<32; i++) {
-        const int num = 64;
+    printf("batch size: %d\n", batch);
+
+    for (int i=0; i<10; i++) {
+        const int num = 32;
         double t0 = _get_time();
         for (int j=0; j<num; j++) {
             sf_engine_run(engine);
         }
         double t1 = _get_time();
-        printf("%.2f FPS\n", num/(t1-t0));
-    }
-}
-
-
-// multi engine throughput test
-static void _test_fps_multi_engine(struct sf_engine *engine, int threads)
-{
-    struct sf_engine *engine_clones[threads];
-    for (int t=0; t<threads; t++) {
-        engine_clones[t] = sf_clone_engine(engine);
-    }
-
-    printf("%d parallel engines:\n", threads);
-    for (int i=0; i<32; i++) {
-        const int num = 32;
-        double t0 = _get_time();
-
-        #pragma omp parallel for
-        for (int t=0; t<threads; t++) {
-            for (int j=0; j<num; j++) {
-                sf_engine_run(engine_clones[t]);
-            }
-        }
-        double t1 = _get_time();
-        printf("%.2f FPS\n", (threads*num)/(t1-t0));
-    }
-
-    for (int t=0; t<threads; t++) {
-        sf_discard_engine(engine_clones[t]);
+        printf("%.2f FPS\n", (num*batch)/(t1-t0));
     }
 }
 
@@ -60,17 +32,17 @@ void test_perf(void)
 {
     const char *model_path = "./test/model/resnet18.onnx";
     const char *input_name = "data";
+    const int batch = 8;
+
     struct sf_graph *graph = sf_load_graph_from_onnx(model_path);
 
     if (graph != NULL) {
-        struct sf_tensor_desc in_desc = {SF_FLOAT32, 4, {1, 3, 224, 224}};
+        struct sf_tensor_desc in_desc = {SF_FLOAT32, 4, {batch, 3, 224, 224}};
         sf_set_in_desc(graph, input_name, in_desc);
         sf_run_optimization(graph);
         struct sf_engine *engine = sf_engine_from_graph(graph);
 
-        int num_threads = omp_get_max_threads();
-        _test_fps_single_engine(engine);
-        _test_fps_multi_engine(engine, num_threads);
+        _test_fps(engine, batch);
 
         // free memory
         sf_discard_engine(engine);

@@ -236,7 +236,7 @@ static void _gemm_kernel_16x16(int k, const float *a,
                                const float *b, float *y)
 {
     __m256 K0, K1, X0, X1, Y0, Y1, Y2, Y3, Y4, Y5, Y6, Y7;
-    const int step = 64;
+    const int step = 8;
 
     while (k >= step) {
         for (int j=0; j<16; j+=4) {
