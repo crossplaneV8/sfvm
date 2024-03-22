@@ -41,6 +41,13 @@ void sf_shared_memory_attach(void *buf);
 void sf_shared_memory_detach(void *buf);
 
 
+// allocate memory with required alignment
+void *sf_aligned_malloc(struct sf_allocator *alloc, size_t size, size_t align);
+
+
+void sf_aligned_free(void *buf);
+
+
 #ifdef __cplusplus
     }
 #endif

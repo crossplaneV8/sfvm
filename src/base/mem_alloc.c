@@ -117,3 +117,20 @@ void sf_shared_memory_detach(void *buf)
 }
 
 
+// allocate memory with required alignment
+void *sf_aligned_malloc(struct sf_allocator *alloc, size_t size, size_t align)
+{
+    uint8_t *p = sf_malloc(alloc, size + align);
+    size_t offset = align - ((size_t)p & (align - 1));
+    uint8_t *buf = p + offset;
+    buf[-1] = (uint8_t)offset;
+    return buf;
+}
+
+
+void sf_aligned_free(void *buf)
+{
+    uint8_t *p = (uint8_t*)buf;
+    sf_free(p - p[-1]);
+}
+

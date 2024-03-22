@@ -81,7 +81,7 @@ static struct sf_engine *_make_engine(struct sf_builder *builder)
 
     engine->addr = sf_malloc(engine->alloc, engine->num_regs * sizeof(void*));
     for (int i=0; i<engine->num_regs; i++) {
-        engine->addr[i] = sf_malloc(engine->alloc, engine->reg_info[i].size);
+        engine->addr[i] = sf_aligned_malloc(engine->alloc, engine->reg_info[i].size, 32);
         if (engine->reg_info[i].data != NULL) {
             memcpy(engine->addr[i], engine->reg_info[i].data, engine->reg_info[i].size);
             engine->reg_info[i].data = engine->addr[i];

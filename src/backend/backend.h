@@ -64,9 +64,6 @@ enum sf_vm_instr
 // generate inference engine from graph
 struct sf_engine *sf_engine_from_graph(struct sf_graph *graph);
 
-// clone an existing engine (share same data)
-struct sf_engine *sf_clone_engine(struct sf_engine *engine);
-
 // discard inference engine
 void sf_discard_engine(struct sf_engine *engine);
 

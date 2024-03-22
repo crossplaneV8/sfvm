@@ -235,8 +235,8 @@ static void _mat_to_block(int trans, int rows, int cols,
 static void _gemm_kernel_16x16(int k, const float *a,
                                const float *b, float *y)
 {
-    __m256 K0, K1, X0, X1, Y0, Y1, Y2, Y3, Y4, Y5, Y6, Y7;
-    const int step = 8;
+    __m256 K0, K1, K2, K3, X0, X1, Y0, Y1, Y2, Y3, Y4, Y5, Y6, Y7;
+    const int step = 64;
 
     while (k >= step) {
         for (int j=0; j<16; j+=4) {
@@ -257,16 +257,16 @@ static void _gemm_kernel_16x16(int k, const float *a,
                 X1 = _mm256_loadu_ps(b + i + 8);
                 K0 = _mm256_broadcast_ss(p + i + 0);
                 K1 = _mm256_broadcast_ss(p + i + 1);
+                K2 = _mm256_broadcast_ss(p + i + 2);
+                K3 = _mm256_broadcast_ss(p + i + 3);
                 Y0 = _mm256_fmadd_ps(K0, X0, Y0);
                 Y1 = _mm256_fmadd_ps(K0, X1, Y1);
                 Y2 = _mm256_fmadd_ps(K1, X0, Y2);
                 Y3 = _mm256_fmadd_ps(K1, X1, Y3);
-                K0 = _mm256_broadcast_ss(p + i + 2);
-                K1 = _mm256_broadcast_ss(p + i + 3);
-                Y4 = _mm256_fmadd_ps(K0, X0, Y4);
-                Y5 = _mm256_fmadd_ps(K0, X1, Y5);
-                Y6 = _mm256_fmadd_ps(K1, X0, Y6);
-                Y7 = _mm256_fmadd_ps(K1, X1, Y7);
+                Y4 = _mm256_fmadd_ps(K2, X0, Y4);
+                Y5 = _mm256_fmadd_ps(K2, X1, Y5);
+                Y6 = _mm256_fmadd_ps(K3, X0, Y6);
+                Y7 = _mm256_fmadd_ps(K3, X1, Y7);
             }
             _mm256_storeu_ps(dst + 0*8, Y0);
             _mm256_storeu_ps(dst + 1*8, Y1);
@@ -300,16 +300,16 @@ static void _gemm_kernel_16x16(int k, const float *a,
                 X1 = _mm256_loadu_ps(b + i + 8);
                 K0 = _mm256_broadcast_ss(p + i + 0);
                 K1 = _mm256_broadcast_ss(p + i + 1);
+                K2 = _mm256_broadcast_ss(p + i + 2);
+                K3 = _mm256_broadcast_ss(p + i + 3);
                 Y0 = _mm256_fmadd_ps(K0, X0, Y0);
                 Y1 = _mm256_fmadd_ps(K0, X1, Y1);
                 Y2 = _mm256_fmadd_ps(K1, X0, Y2);
                 Y3 = _mm256_fmadd_ps(K1, X1, Y3);
-                K0 = _mm256_broadcast_ss(p + i + 2);
-                K1 = _mm256_broadcast_ss(p + i + 3);
-                Y4 = _mm256_fmadd_ps(K0, X0, Y4);
-                Y5 = _mm256_fmadd_ps(K0, X1, Y5);
-                Y6 = _mm256_fmadd_ps(K1, X0, Y6);
-                Y7 = _mm256_fmadd_ps(K1, X1, Y7);
+                Y4 = _mm256_fmadd_ps(K2, X0, Y4);
+                Y5 = _mm256_fmadd_ps(K2, X1, Y5);
+                Y6 = _mm256_fmadd_ps(K3, X0, Y6);
+                Y7 = _mm256_fmadd_ps(K3, X1, Y7);
             }
             _mm256_storeu_ps(dst + 0*8, Y0);
             _mm256_storeu_ps(dst + 1*8, Y1);

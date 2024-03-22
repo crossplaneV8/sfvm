@@ -24,38 +24,6 @@ void *sf_get_output_addr(struct sf_engine *engine, int index)
 }
 
 
-// clone an existing engine (share constant data)
-struct sf_engine *sf_clone_engine(struct sf_engine *engine)
-{
-    struct sf_engine *clone = malloc(sizeof(struct sf_engine));
-    memset(clone, 0, sizeof(struct sf_engine));
-
-    clone->alloc = sf_create_allocator();
-    clone->num_regs = engine->num_regs;
-    clone->reg_info = engine->reg_info;
-
-    clone->addr = sf_malloc(clone->alloc, clone->num_regs * sizeof(void*));
-    for (int i=0; i<clone->num_regs; i++) {
-        if (clone->reg_info[i].data != NULL) {
-            clone->addr[i] = engine->addr[i];
-        } else {
-            clone->addr[i] = sf_malloc(clone->alloc, clone->reg_info[i].size);
-        }
-    }
-
-    clone->num_code = engine->num_code;
-    clone->vm_code = engine->vm_code;
-
-    clone->num_i = engine->num_i;
-    clone->num_o = engine->num_o;
-    clone->i_names = engine->i_names;
-    clone->i_regs = engine->i_regs;
-    clone->o_regs = engine->o_regs;
-
-    return clone;
-}
-
-
 // execute codes on virtual machine
 void sf_engine_run(struct sf_engine *engine)
 {
