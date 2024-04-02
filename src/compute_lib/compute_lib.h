@@ -7,16 +7,18 @@
 #endif
 
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
+#include <x86intrin.h>
+
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>
 
 #include "base/mem_alloc.h"
 
-
-#ifdef __AVX2__
-#include <x86intrin.h>
-#endif
 
 #pragma GCC optimize("unroll-loops")
 
@@ -41,8 +43,8 @@ struct vm_imat
 };
 
 
-// slice imat[y:y+16, 0:k], transpose to [k, 16]
-void vm_pack_imat_16x(struct vm_imat *mat, int y, float *dst);
+// slice imat[y:y+6, 0:k], transpose to [k, 6]
+void vm_pack_imat_6x(struct vm_imat *mat, int y, float *dst);
 
 
 // x[i] = 0
@@ -105,6 +107,11 @@ void vm_transpose_4d_f32(float *x, float *y, int ni, int hi, int wi, int ci, int
 // transpose matrix
 void vm_transpose_mat_f32(int rows, int cols, const float *src,
                           int src_step, float *dst, int dst_step);
+
+// pack matrix
+void vm_pack_mat(int trans, int rows, int cols,
+                 const float *src, int step,
+                 float *dst, int pack);
 
 
 // GEMM

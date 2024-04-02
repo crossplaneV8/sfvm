@@ -121,83 +121,79 @@ static void _get_imat_rows(struct vm_imat *mat, const float *idx[], int begin, i
 }
 
 
-static void _transpose_16x(int len, const float *src[16], float *dst)
+static void _transpose_6x(int len, const float *src[6], float *dst)
 {
     if (len >= 8) {
-        __m256 S0, S1, S2, S3, S4, S5, S6, S7;
-        __m256 T0, T1, T2, T3, T4, T5, T6, T7;
+        __m256i M = _mm256_set_epi32(0, 0, -1, -1, -1, -1, -1, -1);
 
         for (int i=0; i<len; i+=8) {
             int k = i < (len - 8) ? i : (len - 8);
-            for (int j=0; j<16; j+=8) {
-                float *q = dst + k*16 + j;
 
-                S0 = _mm256_loadu_ps(src[j + 0] + k);
-                S1 = _mm256_loadu_ps(src[j + 1] + k);
-                S2 = _mm256_loadu_ps(src[j + 2] + k);
-                S3 = _mm256_loadu_ps(src[j + 3] + k);
-                S4 = _mm256_loadu_ps(src[j + 4] + k);
-                S5 = _mm256_loadu_ps(src[j + 5] + k);
-                S6 = _mm256_loadu_ps(src[j + 6] + k);
-                S7 = _mm256_loadu_ps(src[j + 7] + k);
+            __m256 S0 = _mm256_loadu_ps(src[0] + k);
+            __m256 S1 = _mm256_loadu_ps(src[1] + k);
+            __m256 S2 = _mm256_loadu_ps(src[2] + k);
+            __m256 S3 = _mm256_loadu_ps(src[3] + k);
+            __m256 S4 = _mm256_loadu_ps(src[4] + k);
+            __m256 S5 = _mm256_loadu_ps(src[5] + k);
+            __m256 S6 = _mm256_setzero_ps();
+            __m256 S7 = _mm256_setzero_ps();
 
-                T0 = _mm256_unpacklo_ps(S0, S1);
-                T1 = _mm256_unpacklo_ps(S2, S3);
-                T2 = _mm256_unpacklo_ps(S4, S5);
-                T3 = _mm256_unpacklo_ps(S6, S7);
-                T4 = _mm256_unpackhi_ps(S0, S1);
-                T5 = _mm256_unpackhi_ps(S2, S3);
-                T6 = _mm256_unpackhi_ps(S4, S5);
-                T7 = _mm256_unpackhi_ps(S6, S7);
+            __m256 T0 = _mm256_unpacklo_ps(S0, S1);
+            __m256 T1 = _mm256_unpacklo_ps(S2, S3);
+            __m256 T2 = _mm256_unpacklo_ps(S4, S5);
+            __m256 T3 = _mm256_unpacklo_ps(S6, S7);
+            __m256 T4 = _mm256_unpackhi_ps(S0, S1);
+            __m256 T5 = _mm256_unpackhi_ps(S2, S3);
+            __m256 T6 = _mm256_unpackhi_ps(S4, S5);
+            __m256 T7 = _mm256_unpackhi_ps(S6, S7);
 
-                S0 = _mm256_shuffle_ps(T0, T1, 0x44);
-                S1 = _mm256_shuffle_ps(T2, T3, 0x44);
-                S2 = _mm256_shuffle_ps(T4, T5, 0x44);
-                S3 = _mm256_shuffle_ps(T6, T7, 0x44);
-                S4 = _mm256_shuffle_ps(T0, T1, 0xee);
-                S5 = _mm256_shuffle_ps(T2, T3, 0xee);
-                S6 = _mm256_shuffle_ps(T4, T5, 0xee);
-                S7 = _mm256_shuffle_ps(T6, T7, 0xee);
+            S0 = _mm256_shuffle_ps(T0, T1, 0x44);
+            S1 = _mm256_shuffle_ps(T2, T3, 0x44);
+            S2 = _mm256_shuffle_ps(T4, T5, 0x44);
+            S3 = _mm256_shuffle_ps(T6, T7, 0x44);
+            S4 = _mm256_shuffle_ps(T0, T1, 0xee);
+            S5 = _mm256_shuffle_ps(T2, T3, 0xee);
+            S6 = _mm256_shuffle_ps(T4, T5, 0xee);
+            S7 = _mm256_shuffle_ps(T6, T7, 0xee);
 
-                T0 = _mm256_permute2f128_ps(S0, S1, 0x20);
-                T1 = _mm256_permute2f128_ps(S4, S5, 0x20);
-                T2 = _mm256_permute2f128_ps(S2, S3, 0x20);
-                T3 = _mm256_permute2f128_ps(S6, S7, 0x20);
-                T4 = _mm256_permute2f128_ps(S0, S1, 0x31);
-                T5 = _mm256_permute2f128_ps(S4, S5, 0x31);
-                T6 = _mm256_permute2f128_ps(S2, S3, 0x31);
-                T7 = _mm256_permute2f128_ps(S6, S7, 0x31);
+            T0 = _mm256_permute2f128_ps(S0, S1, 0x20);
+            T1 = _mm256_permute2f128_ps(S4, S5, 0x20);
+            T2 = _mm256_permute2f128_ps(S2, S3, 0x20);
+            T3 = _mm256_permute2f128_ps(S6, S7, 0x20);
+            T4 = _mm256_permute2f128_ps(S0, S1, 0x31);
+            T5 = _mm256_permute2f128_ps(S4, S5, 0x31);
+            T6 = _mm256_permute2f128_ps(S2, S3, 0x31);
+            T7 = _mm256_permute2f128_ps(S6, S7, 0x31);
 
-                _mm256_storeu_ps(q + 0*16, T0);
-                _mm256_storeu_ps(q + 1*16, T1);
-                _mm256_storeu_ps(q + 2*16, T2);
-                _mm256_storeu_ps(q + 3*16, T3);
-                _mm256_storeu_ps(q + 4*16, T4);
-                _mm256_storeu_ps(q + 5*16, T5);
-                _mm256_storeu_ps(q + 6*16, T6);
-                _mm256_storeu_ps(q + 7*16, T7);
-            }
+            _mm256_maskstore_ps(dst + k*6 + 0*6, M, T0);
+            _mm256_maskstore_ps(dst + k*6 + 1*6, M, T1);
+            _mm256_maskstore_ps(dst + k*6 + 2*6, M, T2);
+            _mm256_maskstore_ps(dst + k*6 + 3*6, M, T3);
+            _mm256_maskstore_ps(dst + k*6 + 4*6, M, T4);
+            _mm256_maskstore_ps(dst + k*6 + 5*6, M, T5);
+            _mm256_maskstore_ps(dst + k*6 + 6*6, M, T6);
+            _mm256_maskstore_ps(dst + k*6 + 7*6, M, T7);
         }
     } else {
-        for (int i=0; i<16; i++) {
+        for (int i=0; i<6; i++) {
             for (int j=0; j<len; j++) {
-                dst[j*16 + i] = src[i][j];
+                dst[j*6 + i] = src[i][j];
             }
         }
     }
 }
 
 
-// slice imat[y:y+16, 0:k], transpose to [k, 16]
-void vm_pack_imat_16x(struct vm_imat *mat, int y, float *dst)
+// slice imat[y:y+6, 0:k], transpose to [k, 6]
+void vm_pack_imat_6x(struct vm_imat *mat, int y, float *dst)
 {
     const int segs = mat->segs, len = mat->len;
-    const float *data[segs][16];
-    _get_imat_rows(mat, (void*)data, y, 16);
+    const float *data[segs][6];
+    _get_imat_rows(mat, (void*)data, y, 6);
 
     for (int s=0; s<segs; s++) {
-        _transpose_16x(len, data[s], dst);
-        dst += len * 16;
+        _transpose_6x(len, data[s], dst);
+        dst += len * 6;
     }
 }
 
