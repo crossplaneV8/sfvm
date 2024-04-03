@@ -226,26 +226,24 @@ void vm_gemm_f32(struct sf_allocator *alloc, int trans_a, int trans_b,
     if (m < _KERNEL_M && trans_a == 0 && trans_b == 1) {
          _plain_gemm_NT_f32(m, n, k, a, lda, b, ldb, c, ldc, bias, relu);
     } else {
-        const int _g = _KERNEL_G;
-        const int _m = _KERNEL_M;
-        const int _n = _KERNEL_N;
-
-        const int n16 = (n + 15) & (~15);
-        const int inc_a = trans_a ? 1 : lda;
+        int _g = _KERNEL_G, _m = _KERNEL_M, _n = _KERNEL_N;
+        int n16 = (n + 15) & (~15);
+        int inc_a = trans_a ? 1 : lda;
         float *pack_b = sf_malloc(alloc, k * n16 * sizeof(float));
         vm_pack_mat(trans_b, k, n, b, ldb, pack_b, _n);
 
 #ifdef _OPENMP
+        if (m < _g*_m*omp_get_max_threads()) {_g = 1;}
         #pragma omp parallel for
 #endif
         for (int y=0; y<m; y+=_g*_m) {
             float pack[_g * k * _m] __attribute__((aligned(32)));
             float tmp[_g * _m * _n] __attribute__((aligned(32)));
-            const int dy = (m - y) < _g*_m ? (m - y) : _g*_m;
+            int dy = (m - y) < _g*_m ? (m - y) : _g*_m;
             vm_pack_mat(!trans_a, k, dy, a + y*inc_a, lda, pack, _m);
 
             for (int x=0; x<n; x+=_n) {
-                const int dx = (n - x) < _n ? (n - x) : _n;
+                int dx = (n - x) < _n ? (n - x) : _n;
                 _broadcast_bias_16(bias, x, _g*_m, tmp);
                 _gemm_block_6x16(_g, k, pack, pack_b + x*k, tmp);
                 _copy_mat_relu(dy, dx, tmp, _n, c + y*ldc + x, ldc, relu);
@@ -261,27 +259,25 @@ void vm_implicit_gemm_f32(struct sf_allocator *alloc, int m, int n, int k,
                           struct vm_imat *a, const float *b, int ldb,
                           float *c, int ldc, const float *bias, int relu)
 {
-    const int _g = _KERNEL_G;
-    const int _m = _KERNEL_M;
-    const int _n = _KERNEL_N;
-
-    const int n16 = (n + 15) & (~15);
+    int _g = _KERNEL_G, _m = _KERNEL_M, _n = _KERNEL_N;
+    int n16 = (n + 15) & (~15);
     float *pack_b = sf_malloc(alloc, k * n16 * sizeof(float));
     vm_pack_mat(1, k, n, b, ldb, pack_b, _n);
 
 #ifdef _OPENMP
+    if (m < _g*_m*omp_get_max_threads()) {_g = 1;}
     #pragma omp parallel for
 #endif
     for (int y=0; y<m; y+=_g*_m) {
         float pack[_g * k * _m] __attribute__((aligned(32)));
         float tmp[_g * _m * _n] __attribute__((aligned(32)));
-        const int dy = (m - y) < _g*_m ? (m - y) : _g*_m;
+        int dy = (m - y) < _g*_m ? (m - y) : _g*_m;
 
         for (int i=0; i<_g; i++) {
             vm_pack_imat_6x(a, y + i*_m, pack + i*k*_m);
         }
         for (int x=0; x<n; x+=_n) {
-            const int dx = (n - x) < _n ? (n - x) : _n;
+            int dx = (n - x) < _n ? (n - x) : _n;
             _broadcast_bias_16(bias, x, _g*_m, tmp);
             _gemm_block_6x16(_g, k, pack, pack_b + x*k, tmp);
             _copy_mat_relu(dy, dx, tmp, _n, c + y*ldc + x, ldc, relu);
@@ -296,23 +292,22 @@ void vm_implicit_packed_gemm_f32(struct sf_allocator *alloc, int m, int n, int k
                                  struct vm_imat *a, const float *b,
                                  float *c, int ldc, const float *bias, int relu)
 {
-    const int _g = _KERNEL_G;
-    const int _m = _KERNEL_M;
-    const int _n = _KERNEL_N;
+    int _g = _KERNEL_G, _m = _KERNEL_M, _n = _KERNEL_N;
 
 #ifdef _OPENMP
+    if (m < _g*_m*omp_get_max_threads()) {_g = 1;}
     #pragma omp parallel for
 #endif
     for (int y=0; y<m; y+=_g*_m) {
         float pack[_g * k * _m] __attribute__((aligned(32)));
         float tmp[_g * _m * _n] __attribute__((aligned(32)));
-        const int dy = (m - y) < _g*_m ? (m - y) : _g*_m;
+        int dy = (m - y) < _g*_m ? (m - y) : _g*_m;
 
         for (int i=0; i<_g; i++) {
             vm_pack_imat_6x(a, y + i*_m, pack + i*k*_m);
         }
         for (int x=0; x<n; x+=_n) {
-            const int dx = (n - x) < _n ? (n - x) : _n;
+            int dx = (n - x) < _n ? (n - x) : _n;
             _broadcast_bias_16(bias, x, _g*_m, tmp);
             _gemm_block_6x16(_g, k, pack, b + x*k, tmp);
             _copy_mat_relu(dy, dx, tmp, _n, c + y*ldc + x, ldc, relu);

@@ -125,36 +125,34 @@ static void _transpose_6x(int len, const float *src[6], float *dst)
 {
     if (len >= 8) {
         __m256i M = _mm256_set_epi32(0, 0, -1, -1, -1, -1, -1, -1);
+        __m256 S0, S1, S2, S3, S4, S5, S6, S7;
+        __m256 T0, T1, T2, T3, T4, T5, T6, T7;
 
         for (int i=0; i<len; i+=8) {
             int k = i < (len - 8) ? i : (len - 8);
 
-            __m256 S0 = _mm256_loadu_ps(src[0] + k);
-            __m256 S1 = _mm256_loadu_ps(src[1] + k);
-            __m256 S2 = _mm256_loadu_ps(src[2] + k);
-            __m256 S3 = _mm256_loadu_ps(src[3] + k);
-            __m256 S4 = _mm256_loadu_ps(src[4] + k);
-            __m256 S5 = _mm256_loadu_ps(src[5] + k);
-            __m256 S6 = _mm256_setzero_ps();
-            __m256 S7 = _mm256_setzero_ps();
+            S0 = _mm256_loadu_ps(src[0] + k);
+            S1 = _mm256_loadu_ps(src[1] + k);
+            S2 = _mm256_loadu_ps(src[2] + k);
+            S3 = _mm256_loadu_ps(src[3] + k);
+            S4 = _mm256_loadu_ps(src[4] + k);
+            S5 = _mm256_loadu_ps(src[5] + k);
 
-            __m256 T0 = _mm256_unpacklo_ps(S0, S1);
-            __m256 T1 = _mm256_unpacklo_ps(S2, S3);
-            __m256 T2 = _mm256_unpacklo_ps(S4, S5);
-            __m256 T3 = _mm256_unpacklo_ps(S6, S7);
-            __m256 T4 = _mm256_unpackhi_ps(S0, S1);
-            __m256 T5 = _mm256_unpackhi_ps(S2, S3);
-            __m256 T6 = _mm256_unpackhi_ps(S4, S5);
-            __m256 T7 = _mm256_unpackhi_ps(S6, S7);
+            T0 = _mm256_unpacklo_ps(S0, S1);
+            T1 = _mm256_unpacklo_ps(S2, S3);
+            T2 = _mm256_unpacklo_ps(S4, S5);
+            T4 = _mm256_unpackhi_ps(S0, S1);
+            T5 = _mm256_unpackhi_ps(S2, S3);
+            T6 = _mm256_unpackhi_ps(S4, S5);
 
             S0 = _mm256_shuffle_ps(T0, T1, 0x44);
-            S1 = _mm256_shuffle_ps(T2, T3, 0x44);
+            S1 = _mm256_shuffle_ps(T2, _mm256_setzero_ps(), 0x44);
             S2 = _mm256_shuffle_ps(T4, T5, 0x44);
-            S3 = _mm256_shuffle_ps(T6, T7, 0x44);
+            S3 = _mm256_shuffle_ps(T6, _mm256_setzero_ps(), 0x44);
             S4 = _mm256_shuffle_ps(T0, T1, 0xee);
-            S5 = _mm256_shuffle_ps(T2, T3, 0xee);
+            S5 = _mm256_shuffle_ps(T2, _mm256_setzero_ps(), 0xee);
             S6 = _mm256_shuffle_ps(T4, T5, 0xee);
-            S7 = _mm256_shuffle_ps(T6, T7, 0xee);
+            S7 = _mm256_shuffle_ps(T6, _mm256_setzero_ps(), 0xee);
 
             T0 = _mm256_permute2f128_ps(S0, S1, 0x20);
             T1 = _mm256_permute2f128_ps(S4, S5, 0x20);

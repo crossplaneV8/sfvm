@@ -20,8 +20,6 @@
 #include "base/mem_alloc.h"
 
 
-#pragma GCC optimize("unroll-loops")
-
 
 // implicit matrix
 struct vm_imat
